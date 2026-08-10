@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "albus-cli"
+version = "0.1.0"
+description = "Command-line client for the Albus REST API"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Albus" }]
+dependencies = [
+    "albus-sdk==0.4.0",
+    "typer>=0.26.8,<0.28",
+]
+
+[project.urls]
+Homepage = "https://github.com/albusgroup/albus-cli"
+Repository = "https://github.com/albusgroup/albus-cli"
+Issues = "https://github.com/albusgroup/albus-cli/issues"
+
+[project.scripts]
+albus = "albus_cli.main:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.17,<2",
+    "pytest>=8.4,<10",
+    "ruff>=0.16,<0.17",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/albus_cli"]
+
+[tool.ruff]
+line-length = 81
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["albus_cli", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src", "tests"]
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

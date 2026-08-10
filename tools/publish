@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+# Build and publish albus-cli from a clean, pushed commit.
+
+set -Eeuo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/.." && pwd)"
+
+usage() {
+    cat >&2 <<EOF
+usage: $0 [--dry-run] [--testpypi] <cli-version>
+
+Build and publish albus-cli from a clean, pushed commit.
+
+  --dry-run    Validate the complete release without uploading.
+  --testpypi   Target TestPyPI instead of production PyPI.
+EOF
+}
+
+dry_run=false
+repository="pypi"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        --testpypi)
+            repository="testpypi"
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "error: unknown option: $1" >&2
+            usage
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ $# -ne 1 ]]; then
+    usage
+    exit 2
+fi
+
+cli_version="$1"
+
+for command in git uv; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "error: required command not found: $command" >&2
+        exit 1
+    fi
+done
+
+cd "$repo_root"
+
+toml_version="$(
+    sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1
+)"
+if [[ "$toml_version" != "$cli_version" ]]; then
+    echo "error: pyproject.toml version is $toml_version," \
+        "expected $cli_version" >&2
+    exit 1
+fi
+
+if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
+    echo "error: releases require a clean worktree" >&2
+    exit 1
+fi
+
+branch="$(git symbolic-ref --quiet --short HEAD || true)"
+if [[ -z "$branch" ]]; then
+    echo "error: releases cannot run from a detached HEAD" >&2
+    exit 1
+fi
+
+remote="$(git config --get "branch.$branch.remote" || true)"
+merge_ref="$(git config --get "branch.$branch.merge" || true)"
+if [[ -z "$remote" || -z "$merge_ref" ]]; then
+    echo "error: branch $branch does not have an upstream" >&2
+    exit 1
+fi
+
+if ! remote_output="$(git ls-remote --exit-code --refs "$remote" "$merge_ref")"
+then
+    echo "error: upstream ref $merge_ref does not exist on $remote" >&2
+    exit 1
+fi
+
+remote_sha="$(awk 'NR == 1 { print $1 }' <<<"$remote_output")"
+local_sha="$(git rev-parse HEAD)"
+if [[ "$remote_sha" != "$local_sha" ]]; then
+    upstream_branch="${merge_ref#refs/heads/}"
+    echo "error: HEAD is not the commit pushed to" \
+        "$remote/$upstream_branch" >&2
+    exit 1
+fi
+
+if [[ "$dry_run" == false && "$branch" != "master" ]]; then
+    echo "error: uploads must run from the master branch" >&2
+    exit 1
+fi
+
+./tools/check
+
+rm -rf dist
+uv build
+
+wheel=(dist/*.whl)
+sdist=(dist/*.tar.gz)
+if [[ ${#wheel[@]} -ne 1 || ${#sdist[@]} -ne 1 ]]; then
+    echo "error: expected exactly one wheel and one sdist in dist/" >&2
+    ls -la dist >&2 || true
+    exit 1
+fi
+
+wheel_name="$(basename "${wheel[0]}")"
+case "$wheel_name" in
+    *-py3-none-any.whl) ;;
+    *)
+        echo "error: wheel must be py3-none-any, got $wheel_name" >&2
+        exit 1
+        ;;
+esac
+
+echo "wheel: ${wheel[0]}"
+echo "sdist: ${sdist[0]}"
+shasum -a 256 "${wheel[0]}" "${sdist[0]}"
+
+if [[ "$dry_run" == true ]]; then
+    echo "dry-run: skipping upload"
+    exit 0
+fi
+
+if [[ -z "${UV_PUBLISH_TOKEN:-}" ]]; then
+    echo "error: UV_PUBLISH_TOKEN is not set" >&2
+    exit 1
+fi
+
+publish_url="https://upload.pypi.org/legacy/"
+repository_label="PyPI"
+if [[ "$repository" == "testpypi" ]]; then
+    publish_url="https://test.pypi.org/legacy/"
+    repository_label="TestPyPI"
+fi
+
+echo "About to upload albus-cli==$cli_version to $repository_label"
+printf 'Type the repository label to confirm (%s): ' "$repository_label"
+read -r confirm
+if [[ "$confirm" != "$repository_label" ]]; then
+    echo "error: confirmation mismatch" >&2
+    exit 1
+fi
+
+printf 'Type the version to confirm (%s): ' "$cli_version"
+read -r confirm_version
+if [[ "$confirm_version" != "$cli_version" ]]; then
+    echo "error: version confirmation mismatch" >&2
+    exit 1
+fi
+
+uv publish \
+    --publish-url "$publish_url" \
+    --trusted-publishing never \
+    --token "$UV_PUBLISH_TOKEN" \
+    dist/*
+
+echo "Published albus-cli==$cli_version to $repository_label"
