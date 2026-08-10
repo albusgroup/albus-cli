@@ -9,19 +9,19 @@ command maps to one API operation and prints JSON (pipe into `jq`).
 macOS / Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
 ```
 
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/albusgroup/albus-cli/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex
 ```
 
 Pin a version:
 
 ```bash
-ALBUS_CLI_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/main/install.sh | sh
+ALBUS_CLI_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
 ```
 
 The installer uses, in order: `uv tool install`, `pip install --user`, or

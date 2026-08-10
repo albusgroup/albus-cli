@@ -2,7 +2,7 @@
 # Install the Albus CLI (albus) from PyPI.
 # Prefers uv, then pip --user, then pip inside a conda env.
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
 # Optional:
 #   ALBUS_CLI_VERSION=0.1.0 curl -fsSL ... | sh
 

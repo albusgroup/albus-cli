@@ -1,7 +1,7 @@
 # Install the Albus CLI (albus) from PyPI.
 # Prefers uv, then pip --user, then pip inside a conda env.
 # Usage:
-#   irm https://raw.githubusercontent.com/albusgroup/albus-cli/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex
 # Optional:
 #   $env:ALBUS_CLI_VERSION = "0.1.0"
 

@@ -8,6 +8,8 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      NO_COLOR: "1"
     steps:
       - uses: actions/checkout@v4
 
