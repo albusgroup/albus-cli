@@ -99,7 +99,7 @@ def test_run_rejects_agent_file_combined_with_flags(
     )
 
     assert result.exit_code == 2
-    assert "cannot be combined" in result.output
+    assert "whole agent configuration" in result.output
     assert albus.calls == []
 
 
