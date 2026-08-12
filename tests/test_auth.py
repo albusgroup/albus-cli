@@ -74,9 +74,8 @@ def test_api_key_wins_over_a_stored_session(
     result = runner.invoke(app, ["sessions", "list"])
 
     assert result.exit_code == 0, result.output
-    security = albus.init_kwargs[0]["security"]
-    assert security.api_key_auth == "env-key"
-    assert security.bearer_auth is None
+    assert albus.init_kwargs[0]["api_key"] == "env-key"
+    assert albus.init_kwargs[0]["access_token"] is None
 
 
 def test_stored_session_authenticates_with_a_bearer_token(
@@ -87,9 +86,8 @@ def test_stored_session_authenticates_with_a_bearer_token(
     result = runner.invoke(app, ["sessions", "list"])
 
     assert result.exit_code == 0, result.output
-    security = signed_out.init_kwargs[0]["security"]
-    assert security.bearer_auth == "stored-access"
-    assert security.api_key_auth is None
+    assert signed_out.init_kwargs[0]["access_token"] == "stored-access"
+    assert signed_out.init_kwargs[0]["api_key"] is None
 
 
 def test_expired_session_is_refreshed_and_stored(
@@ -113,7 +111,7 @@ def test_expired_session_is_refreshed_and_stored(
 
     assert result.exit_code == 0, result.output
     assert grants == ["refresh"]
-    assert signed_out.init_kwargs[0]["security"].bearer_auth == "renewed-access"
+    assert signed_out.init_kwargs[0]["access_token"] == "renewed-access"
     saved = credentials.load(BASE_URL)
     assert saved is not None
     assert saved.access_token == "renewed-access"
@@ -159,8 +157,7 @@ def test_a_session_expiring_within_the_leeway_is_refreshed(
     )
 
     assert runner.invoke(app, ["sessions", "list"]).exit_code == 0
-    security = signed_out.init_kwargs[0]["security"]
-    assert security.bearer_auth == "renewed-access"
+    assert signed_out.init_kwargs[0]["access_token"] == "renewed-access"
 
 
 def test_rejected_refresh_reports_an_expired_session(
@@ -242,7 +239,7 @@ def test_login_stores_the_session_and_names_the_account(
     # The account is resolved over the API with the new credential,
     # never by reading the token.
     assert signed_out.calls[-1].name == "whoami"
-    assert signed_out.init_kwargs[-1]["security"].bearer_auth == "fresh-access"
+    assert signed_out.init_kwargs[-1]["access_token"] == "fresh-access"
 
 
 def signs_in(
@@ -273,7 +270,7 @@ def test_login_names_the_account_it_just_signed_in_as(
 
     assert result.exit_code == 0, result.output
     assert "as carlo@albus.sh" in result.output
-    assert albus.init_kwargs[-1]["security"].bearer_auth == "fresh-access"
+    assert albus.init_kwargs[-1]["access_token"] == "fresh-access"
 
 
 def test_login_says_an_api_key_shadows_the_new_session(
@@ -441,9 +438,8 @@ def test_whoami_uses_the_session_over_an_api_key(
     stored(expires_in=3600)
 
     assert runner.invoke(app, ["whoami"]).exit_code == 0
-    security = albus.init_kwargs[0]["security"]
-    assert security.bearer_auth == "stored-access"
-    assert security.api_key_auth is None
+    assert albus.init_kwargs[0]["access_token"] == "stored-access"
+    assert albus.init_kwargs[0]["api_key"] is None
 
 
 def test_whoami_with_only_an_api_key_asks_for_a_sign_in(

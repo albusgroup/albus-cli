@@ -25,15 +25,14 @@ def test_health_needs_no_credential(
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == {"status": "ok"}
-    security = albus.init_kwargs[0]["security"]
-    assert security.bearer_auth is None
-    assert security.api_key_auth is None
+    assert albus.init_kwargs[0]["access_token"] is None
+    assert albus.init_kwargs[0]["api_key"] is None
 
 
 def test_health_sends_no_api_key_either(albus: FakeAlbus) -> None:
     """The `albus` fixture exports an API key, which `/health` ignores."""
     assert runner.invoke(app, ["health"]).exit_code == 0
-    assert albus.init_kwargs[0]["security"].api_key_auth is None
+    assert albus.init_kwargs[0]["api_key"] is None
 
 
 def test_rejected_health_names_no_credential(albus: FakeAlbus) -> None:

@@ -58,6 +58,5 @@ def test_the_session_is_used_over_an_api_key(
     result = runner.invoke(app, ["invites", "create", "new@example.com"])
 
     assert result.exit_code == 0, result.output
-    security = signed_in.init_kwargs[0]["security"]
-    assert security.bearer_auth == "stored-access"
-    assert security.api_key_auth is None
+    assert signed_in.init_kwargs[0]["access_token"] == "stored-access"
+    assert signed_in.init_kwargs[0]["api_key"] is None

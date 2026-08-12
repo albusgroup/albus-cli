@@ -85,9 +85,8 @@ def test_the_session_is_used_over_an_api_key(
     monkeypatch.setenv(client.API_KEY_ENV, "env-key")
 
     assert runner.invoke(app, ["tokens", "list"]).exit_code == 0
-    security = signed_in.init_kwargs[0]["security"]
-    assert security.bearer_auth == "stored-access"
-    assert security.api_key_auth is None
+    assert signed_in.init_kwargs[0]["access_token"] == "stored-access"
+    assert signed_in.init_kwargs[0]["api_key"] is None
 
 
 def test_only_an_api_key_asks_for_a_sign_in(

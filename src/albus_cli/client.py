@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 
 import httpx
-from albus_sdk import Albus, models
+from albus_sdk import Albus
 from albus_sdk.sdkconfiguration import SERVERS
 
 from albus_cli import credentials, oauth
@@ -59,9 +59,7 @@ def client(base_url: str, timeout: float | None) -> Albus:
     if key:
         # The environment wins over a stored session deliberately, so CI
         # and agent harnesses inject a credential without touching disk.
-        return _client(
-            base_url, timeout, models.Security(api_key_auth=key), True
-        )
+        return _client(base_url, timeout, api_key=key)
 
     stored = credentials.load(base_url)
     if stored is None:
@@ -96,7 +94,7 @@ def public_client(base_url: str, timeout: float | None) -> Albus:
     sign-in changes."""
     global _used
     _used = None
-    return _built(base_url, timeout, models.Security())
+    return _built(base_url, timeout)
 
 
 def bearer_client(
@@ -104,12 +102,7 @@ def bearer_client(
 ) -> Albus:
     """A client on one credential, for `login` reading back the session
     it just stored rather than whatever precedence would pick."""
-    return _client(
-        base_url,
-        timeout,
-        models.Security(bearer_auth=credential.access_token),
-        False,
-    )
+    return _client(base_url, timeout, access_token=credential.access_token)
 
 
 def credential(tokens: oauth.Tokens, replacing: Credential | None) -> Credential:
@@ -213,19 +206,30 @@ def _shadowing(consequence: str) -> str | None:
 def _client(
     base_url: str,
     timeout: float | None,
-    security: models.Security,
-    api_key: bool,
+    *,
+    api_key: str | None = None,
+    access_token: str | None = None,
 ) -> Albus:
     global _used
-    _used = _Used(base_url=base_url, api_key=api_key)
-    return _built(base_url, timeout, security)
+    _used = _Used(base_url=base_url, api_key=api_key is not None)
+    return _built(
+        base_url,
+        timeout,
+        api_key=api_key,
+        access_token=access_token,
+    )
 
 
 def _built(
-    base_url: str, timeout: float | None, security: models.Security
+    base_url: str,
+    timeout: float | None,
+    *,
+    api_key: str | None = None,
+    access_token: str | None = None,
 ) -> Albus:
     return Albus(
-        security=security,
+        api_key=api_key,
+        access_token=access_token,
         server_url=base_url,
         client=httpx.Client(follow_redirects=True, timeout=timeout),
     )
