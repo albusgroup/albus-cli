@@ -1,5 +1,7 @@
 .PHONY: install lint fmt typecheck test check
 
+# uv owns the virtualenv. The albus-sdk version is pinned in pyproject.toml,
+# so a sync installs what a release would publish against.
 install:
 	uv sync
 

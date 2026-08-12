@@ -1,8 +1,9 @@
 # albus CLI
 
-Command-line client for the Albus REST API. Thin shell over the public
-[`albus-sdk`](https://pypi.org/project/albus-sdk/) Python package: every
-command maps to one API operation and prints JSON (pipe into `jq`).
+Command-line client for the Albus REST API, built on the public
+[`albus-sdk`](https://pypi.org/project/albus-sdk/) Python SDK. It is a thin
+shell over the SDK: every command that calls Albus maps to one API operation
+and prints the JSON response, so output pipes into `jq`.
 
 ## Install
 
@@ -21,14 +22,12 @@ irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | 
 Pin a version:
 
 ```bash
-ALBUS_CLI_VERSION=0.1.0 curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | ALBUS_CLI_VERSION=0.2.0 sh
 ```
 
 The installer uses, in order: `uv tool install`, `pip install --user`, or
-`pip` inside a conda environment. It does not download OS-specific Albus
-binaries and does not check OS versions.
-
-You can also install directly:
+`pip` inside a conda environment. It does not download OS-specific binaries.
+To install directly instead:
 
 ```bash
 uv tool install albus-cli
@@ -38,32 +37,70 @@ pip install --user albus-cli
 
 ## Authentication
 
+Sign in with a browser, which stores a session per base URL and renews it as
+it expires:
+
+```bash
+albus login
+albus whoami
+albus logout
+```
+
+`albus health` is the one command that needs no credential, matching its empty
+`security` in `api/openapi.yaml`: run it first to tell an unreachable API from
+an unauthenticated one. `albus status` reports which credential is in effect
+and whether Albus accepts it, as JSON, exiting 0 either way — it is the one
+command to run to find out where you stand. `albus login --no-browser` prints
+the authorization URL instead of opening it, for a coding agent signing in the
+user in front of it.
+
+Or export an organization API key, which wins over a stored session so CI and
+agent harnesses need not touch disk:
+
 ```bash
 export ALBUS_API_KEY=...     # organization API key
-export ALBUS_BASE_URL=...    # optional; defaults to production
+export ALBUS_BASE_URL=http://localhost:8080/api  # optional; defaults to prod
 ```
 
 `--base-url` overrides `ALBUS_BASE_URL`, and `--timeout` bounds each request
 (a waiting `sessions run` long-polls and is exempt).
 
-The API key is the only credential, so the CLI covers only the operations that
-accept `apiKeyAuth`.
+`albus login` opens a browser on this machine and listens on
+`127.0.0.1:8484-8487`; on a headless host, forward those ports or export
+`ALBUS_API_KEY` instead. The
+session is written to `$ALBUS_CONFIG_DIR/credentials.json`, else
+`$XDG_CONFIG_HOME/albus/credentials.json`, else `~/.config/albus/`.
+
+Operations whose `security` in `api/openapi.yaml` lists `bearerAuth` only,
+such as `/whoami`, `/tokens`, and `/invites`, need the browser session.
+`albus whoami`, `albus tokens`, and `albus invites` use it even when
+`ALBUS_API_KEY` is exported, and say to run `albus login` when there is none.
+Sign in first, then `albus tokens create` to mint the key that
+`ALBUS_API_KEY` carries.
 
 ## Commands
 
 ```bash
 albus health
+albus --version
+albus login
+albus login --no-browser
+albus whoami
+albus logout
+albus status
 
 albus sessions run my-session -p "summarize the incident" \
   --agent-name support-triage --model gemini-3.6-flash \
   --provider gemini --credential albus.sh/secrets/gemini-key
+albus sessions run my-session -p "and the follow-up?" \
+  --agent-name support-triage --agent-file agent.json --no-wait
 albus sessions list
 albus sessions get my-session --limit 20
 albus sessions audit my-session --after "$cursor"
 albus sessions delete my-session
 
 albus secrets list
-albus secrets create gemini-key --value ...
+albus secrets create gemini-key --value ...   # or pipe the value on stdin
 albus secrets get gemini-key
 albus secrets update gemini-key < value.txt
 albus secrets delete gemini-key
@@ -71,13 +108,58 @@ albus secrets delete gemini-key
 albus agents list
 albus agents get support-triage
 albus agents revision support-triage "$revision"
+
+albus tokens list
+albus tokens create ci
+albus tokens get "$id"
+albus tokens delete "$id"
+
+albus invites create teammate@example.com
 ```
+
+`tokens create` prints the only copy of the key value the API ever returns;
+`list` and `get` return metadata alone.
+
+`invites create` invites a person by email, and they get their own
+organization on first sign-in. `CreateInviteRequest`'s `role` and
+`organization_id` have no flags: one user is one organization for the beta.
+
+`sessions run` waits for the assistant response by default; pass `--no-wait`
+to return as soon as the invocation is accepted, or `--wait-timeout` to bound
+the wait server-side. Pass `--idempotency-key` to make a run retry-safe. The
+JSON output carries the effective `idempotency_key`, whether supplied by the
+caller or generated by the server — absent only if something between the CLI
+and Albus strips the response header on a run that supplied no key.
+
+`--agent-file` takes a JSON object shaped like the API's `AgentConfig` and
+covers what the flags do not (MCP servers, provider URL overrides):
+
+```json
+{
+  "model": { "name": "gemini-3.6-flash" },
+  "mcp_servers": [
+    { "name": "github", "url": "https://mcp.example.com/mcp" }
+  ]
+}
+```
+
+## Documentation
+
+| Reader | URL |
+|---|---|
+| A person | <https://docs.albus.sh> |
+| A coding agent | <https://docs.albus.sh/agents/docs.md> |
+
+The CLI prints both, so whoever is reading its output has the URL that is
+theirs.
 
 ## Development
 
+The CLI is developed in the private Albus repository, next to the
+`api/openapi.yaml` contract and the SDK it is built on, and each release is
+copied to the public `albusgroup/albus-cli` repository. That repository accepts
+issues, not pull requests — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ```bash
-make install
 make check      # ruff, mypy --strict, pytest
 ```
-
-See [RELEASING.md](RELEASING.md) to publish a PyPI version.

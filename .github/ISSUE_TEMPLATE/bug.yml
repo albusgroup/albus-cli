@@ -1,0 +1,61 @@
+name: Bug report
+description: Report incorrect or unexpected behavior in the albus command
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The CLI is maintained upstream, and this repository is a mirror of each
+        release. Fixes land upstream and arrive in the next published version,
+        which closes the issue.
+
+        **Never paste access tokens, API keys, secret values, or customer data
+        into this issue.** Redact them from commands, logs, and tracebacks.
+        Report suspected vulnerabilities privately through
+        [SECURITY.md](https://github.com/albusgroup/albus-cli/blob/master/SECURITY.md)
+        instead of opening an issue.
+
+  - type: input
+    id: cli-version
+    attributes:
+      label: albus-cli version
+      description: Output of `pip show albus-cli` or `uv tool list`.
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python --version`.
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Command and output
+      description: >
+        The command you ran and what it printed, with credentials and customer
+        data removed.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: >
+        What happened instead, including the exit status, the HTTP status, and
+        redacted output when relevant.
+    validations:
+      required: true

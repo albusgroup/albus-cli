@@ -3,8 +3,9 @@
 # Prefers uv, then pip --user, then pip inside a conda env.
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.sh | sh
-# Optional:
-#   ALBUS_CLI_VERSION=0.1.0 curl -fsSL ... | sh
+# Optional, to pin a version. The assignment goes on the shell reading the
+# script, not on curl, which is a separate process:
+#   curl -fsSL ... | ALBUS_CLI_VERSION=0.2.0 sh
 
 set -eu
 
@@ -100,12 +101,21 @@ else
     exit 1
 fi
 
+# The last lines are where attention is highest, so they are the one
+# thing to do next and where to read about the rest. `albus --help` used
+# to be dumped here, which buries both.
+say ""
 if have albus; then
-    say "Running: albus --help"
-    albus --help
+    installed=$(albus --version 2>/dev/null || true)
+    say "Installed albus ${installed:-from ${spec}}."
 else
-    say "albus is installed but not on PATH yet. Open a new shell or add"
-    say "the scripts directory reported above to PATH, then run: albus --help"
+    say "Installed, but albus is not on PATH yet: open a new shell, or add"
+    say "the scripts directory reported above to PATH."
 fi
 
-say "Set ALBUS_API_KEY before calling the API."
+say ""
+say "Next:"
+say "  albus login"
+say ""
+say "  Docs        https://docs.albus.sh"
+say "  Agents      https://docs.albus.sh/agents/docs.md"

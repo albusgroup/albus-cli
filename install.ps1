@@ -3,7 +3,7 @@
 # Usage:
 #   irm https://raw.githubusercontent.com/albusgroup/albus-cli/master/install.ps1 | iex
 # Optional:
-#   $env:ALBUS_CLI_VERSION = "0.1.0"
+#   $env:ALBUS_CLI_VERSION = "0.2.0"
 
 $ErrorActionPreference = "Stop"
 
@@ -100,11 +100,21 @@ if (Test-Command "uv") {
     throw "need uv, pip, or conda on PATH. Install one of them, then re-run."
 }
 
+# The last lines are where attention is highest, so they are the one thing to
+# do next and where to read about the rest. `albus --help` used to be dumped
+# here, which buries both.
+Write-Host ""
 if (Test-Command "albus") {
-    Write-Host "Running: albus --help"
-    & albus --help
+    $installed = (& albus --version 2>$null)
+    if ([string]::IsNullOrEmpty($installed)) { $installed = "from $Spec" }
+    Write-Host "Installed albus $installed."
 } else {
-    Write-Host "albus is installed but not on PATH yet. Open a new shell or add the scripts directory to PATH, then run: albus --help"
+    Write-Host "Installed, but albus is not on PATH yet: open a new shell, or add the Scripts directory to PATH."
 }
 
-Write-Host "Set ALBUS_API_KEY before calling the API."
+Write-Host ""
+Write-Host "Next:"
+Write-Host "  albus login"
+Write-Host ""
+Write-Host "  Docs        https://docs.albus.sh"
+Write-Host "  Agents      https://docs.albus.sh/agents/docs.md"

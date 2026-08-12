@@ -6,8 +6,12 @@ from typing import Annotated
 import typer
 from albus_sdk import models
 
+# The SDK's models are pydantic's, so validating one raises pydantic's
+# error; it arrives with `albus-sdk` rather than as a dependency of ours.
+from pydantic import ValidationError
+
 from albus_cli.client import client
-from albus_cli.context import options, sdk
+from albus_cli.context import base_url, options, sdk
 from albus_cli.output import emit
 
 app = typer.Typer(no_args_is_help=True, help="Run and inspect sessions.")
@@ -44,7 +48,13 @@ def agent_config(
                 "cannot be combined with the other agent options"
             )
 
-        return models.AgentConfig.model_validate_json(agent_file.read_text())
+        try:
+            return models.AgentConfig.model_validate_json(agent_file.read_text())
+        except ValidationError as invalid:
+            raise typer.BadParameter(
+                f"{agent_file} is not a valid agent configuration: "
+                f"{_first(invalid)}"
+            ) from invalid
 
     if model is None:
         raise typer.BadParameter(
@@ -68,6 +78,17 @@ def agent_config(
         system_prompt=system_prompt,
         max_steps=max_steps,
     )
+
+
+def _first(invalid: ValidationError) -> str:
+    """The first thing wrong with a file the caller wrote, without
+    pydantic's report of every field and its docs link."""
+    error = invalid.errors()[0]
+    where = ".".join(str(part) for part in error["loc"])
+    if not where:
+        return error["msg"]
+
+    return f"{where}: {error['msg']}"
 
 
 @app.command("run")
@@ -132,6 +153,7 @@ def run(
             "--agent-file",
             exists=True,
             dir_okay=False,
+            readable=True,
             help="JSON file holding the whole agent configuration, for "
             "configurations the flags do not cover (e.g. MCP servers).",
         ),
@@ -168,20 +190,28 @@ def run(
         tools or [],
         max_steps,
     )
-    opts = options(ctx)
+    timeout = options(ctx).timeout
     # A waiting run long-polls, so it outlives the request timeout.
-    albus = client(opts.base_url, None if wait else opts.timeout)
+    albus = client(base_url(ctx), None if wait else timeout)
     response = albus.sessions.run_session(
         id=session_id,
         user_prompt=prompt,
         agent_name=agent_name,
         agent=agent,
         idempotency_key=idempotency_key,
-        wait=wait,
-        wait_timeout=wait_timeout,
+        # The server waits whenever the parameter is present, and 0 is
+        # its unbounded wait.
+        wait_timeout_seconds=(wait_timeout or 0) if wait else None,
     )
     result = response.result.model_dump(mode="json", exclude_none=True)
-    result["idempotency_key"] = response.headers["idempotency-key"][0]
+    # The server names the invocation's effective key in a header, and the
+    # key the caller supplied is that value; a proxy that drops the header
+    # is not a reason to lose the run's output.
+    served = response.headers.get("idempotency-key", [])
+    effective = served[0] if served else idempotency_key
+    if effective is not None:
+        result["idempotency_key"] = effective
+
     emit(result)
 
 

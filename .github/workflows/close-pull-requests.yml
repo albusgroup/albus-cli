@@ -1,0 +1,51 @@
+name: Close pull requests
+
+# This repository is a mirror: every release overwrites its tree, so a merged
+# pull request is deleted by the next release. GitHub cannot disable pull
+# requests, so opened ones are closed here with a pointer to issues.
+#
+# pull_request_target runs this file from the default branch with a read/write
+# token, so it also works for pull requests opened from forks.
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          cat > comment.md <<EOF
+          Thanks for taking the time to write this, @${AUTHOR} — but this
+          repository is a read-only mirror of the Albus CLI, and every release
+          overwrites its entire tree. A pull request merged here would be
+          deleted by the next published version, so this one is being closed
+          unmerged.
+
+          Please open an issue instead:
+          https://github.com/${GH_REPO}/issues/new/choose
+
+          Describe the behavior you expected, and include the diff or patch
+          from this pull request in the issue body. Maintainers apply the fix
+          in the private upstream repository, and it reaches you in the next
+          release, which closes the issue.
+
+          Report suspected vulnerabilities privately through
+          [SECURITY.md](https://github.com/${GH_REPO}/blob/master/SECURITY.md),
+          not as a public issue.
+
+          See [CONTRIBUTING.md](https://github.com/${GH_REPO}/blob/master/CONTRIBUTING.md)
+          for how this repository is maintained.
+          EOF
+
+          gh pr comment "$PULL_REQUEST" --body-file comment.md
+          gh pr close "$PULL_REQUEST"

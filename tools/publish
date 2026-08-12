@@ -61,49 +61,12 @@ done
 
 cd "$repo_root"
 
-toml_version="$(
-    sed -n 's/^version = "\([^"]*\)"/\1/p' pyproject.toml | head -n 1
-)"
-if [[ "$toml_version" != "$cli_version" ]]; then
-    echo "error: pyproject.toml version is $toml_version," \
-        "expected $cli_version" >&2
-    exit 1
-fi
+# shellcheck source=tools/release_state.sh
+source "$script_dir/release_state.sh"
 
-if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
-    echo "error: releases require a clean worktree" >&2
-    exit 1
-fi
+require_release_state "$cli_version"
 
-branch="$(git symbolic-ref --quiet --short HEAD || true)"
-if [[ -z "$branch" ]]; then
-    echo "error: releases cannot run from a detached HEAD" >&2
-    exit 1
-fi
-
-remote="$(git config --get "branch.$branch.remote" || true)"
-merge_ref="$(git config --get "branch.$branch.merge" || true)"
-if [[ -z "$remote" || -z "$merge_ref" ]]; then
-    echo "error: branch $branch does not have an upstream" >&2
-    exit 1
-fi
-
-if ! remote_output="$(git ls-remote --exit-code --refs "$remote" "$merge_ref")"
-then
-    echo "error: upstream ref $merge_ref does not exist on $remote" >&2
-    exit 1
-fi
-
-remote_sha="$(awk 'NR == 1 { print $1 }' <<<"$remote_output")"
-local_sha="$(git rev-parse HEAD)"
-if [[ "$remote_sha" != "$local_sha" ]]; then
-    upstream_branch="${merge_ref#refs/heads/}"
-    echo "error: HEAD is not the commit pushed to" \
-        "$remote/$upstream_branch" >&2
-    exit 1
-fi
-
-if [[ "$dry_run" == false && "$branch" != "master" ]]; then
+if [[ "$dry_run" == false && "$release_branch" != "master" ]]; then
     echo "error: uploads must run from the master branch" >&2
     exit 1
 fi
@@ -151,25 +114,23 @@ if [[ "$repository" == "testpypi" ]]; then
     repository_label="TestPyPI"
 fi
 
-echo "About to upload albus-cli==$cli_version to $repository_label"
-printf 'Type the repository label to confirm (%s): ' "$repository_label"
-read -r confirm
-if [[ "$confirm" != "$repository_label" ]]; then
-    echo "error: confirmation mismatch" >&2
+if [[ ! -t 0 ]]; then
+    echo "error: publishing requires an interactive confirmation" >&2
     exit 1
 fi
 
-printf 'Type the version to confirm (%s): ' "$cli_version"
-read -r confirm_version
-if [[ "$confirm_version" != "$cli_version" ]]; then
-    echo "error: version confirmation mismatch" >&2
+confirmation_prompt="publish $cli_version to $repository_label"
+read -r -p "Type '$confirmation_prompt' to continue: " confirmation
+if [[ "$confirmation" != "$confirmation_prompt" ]]; then
+    echo "Publication cancelled." >&2
     exit 1
 fi
 
+# The token stays in the environment, where uv reads it: an argument is
+# readable by any local process through the process table.
 uv publish \
     --publish-url "$publish_url" \
     --trusted-publishing never \
-    --token "$UV_PUBLISH_TOKEN" \
     dist/*
 
 echo "Published albus-cli==$cli_version to $repository_label"

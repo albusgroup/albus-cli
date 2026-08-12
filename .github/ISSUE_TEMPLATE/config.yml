@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/albusgroup/albus-cli/blob/master/SECURITY.md
+    about: Report privately. Do not open a public issue for a vulnerability.
+  - name: How this repository is maintained
+    url: https://github.com/albusgroup/albus-cli/blob/master/CONTRIBUTING.md
+    about: This is a release mirror. It accepts issues, not pull requests.

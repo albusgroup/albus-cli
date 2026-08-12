@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/.." && pwd)"
+
+# Files that only mean something inside this repository. Everything else in the
+# tracked tree is what the public mirror contains.
+internal_paths=(AGENTS.md .vscode)
+
+usage() {
+    cat >&2 <<EOF
+usage: $0 [--dry-run] <cli-version> <mirror-checkout>
+
+Copy the released client tree to its public mirror as one squashed commit, tag
+it, and close the mirror issues the release fixes. <mirror-checkout> is a clone
+of the mirror whose origin can be pushed to.
+
+  --dry-run    Build the release commit locally without pushing or closing.
+EOF
+}
+
+dry_run=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --*)
+            echo "error: unknown option: $1" >&2
+            usage
+            exit 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
+if [[ $# -ne 2 ]]; then
+    usage
+    exit 2
+fi
+
+cli_version="$1"
+mirror_argument="$2"
+
+for command in git gh; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "error: required command not found: $command" >&2
+        exit 1
+    fi
+done
+
+cd "$repo_root"
+
+# shellcheck source=tools/release_state.sh
+source "$script_dir/release_state.sh"
+
+require_release_state "$cli_version"
+
+if [[ "$dry_run" == false && "$release_branch" != "master" ]]; then
+    echo "error: the mirror is written from the master branch" >&2
+    exit 1
+fi
+
+# The mirror repository is named after this directory, so no per-client mapping
+# is needed: clients/<name> is pushed to albusgroup/<name>.
+mirror_slug="albusgroup/$(basename "$repo_root")"
+monorepo_root="$(git rev-parse --show-toplevel)"
+client_prefix="$(git rev-parse --show-prefix)"
+source_commit="$(git rev-parse HEAD)"
+release_tag="v$cli_version"
+
+if [[ ! -d "$mirror_argument/.git" ]]; then
+    echo "error: not a git checkout: $mirror_argument" >&2
+    exit 1
+fi
+
+mirror_root="$(cd -- "$mirror_argument" && pwd)"
+mirror_origin="$(git -C "$mirror_root" remote get-url origin)"
+
+if [[ "$mirror_origin" != *"$mirror_slug"* ]]; then
+    echo "error: $mirror_root has origin $mirror_origin, expected" \
+        "$mirror_slug" >&2
+    exit 1
+fi
+
+if [[ -n "$(
+    git -C "$mirror_root" status --porcelain --untracked-files=normal
+)" ]]; then
+    echo "error: the mirror checkout must be clean" >&2
+    exit 1
+fi
+
+if git -C "$mirror_root" ls-remote --exit-code --refs origin \
+    "refs/tags/$release_tag" >/dev/null 2>&1
+then
+    echo "error: $mirror_slug already has the tag $release_tag" >&2
+    exit 1
+fi
+
+previous_source_commit=""
+if git -C "$mirror_root" rev-parse --verify --quiet HEAD >/dev/null; then
+    previous_source_commit="$(
+        git -C "$mirror_root" log -1 \
+            --format='%(trailers:key=Source-Commit,valueonly)' |
+            head -n 1 | tr -d '[:space:]'
+    )"
+fi
+
+# Which public reports this release carries a fix for, derived before anything
+# is written: each fix names its issue in a Mirror-Issue trailer, and the
+# previous release commit says where to start reading.
+issues=()
+
+if [[ -z "$previous_source_commit" ]]; then
+    echo "note: the mirror has no previous release commit, so no issue range" \
+        "can be derived" >&2
+elif ! git cat-file -e "$previous_source_commit^{commit}" 2>/dev/null; then
+    # Silently closing nothing is worse than failing: a reporter would never
+    # learn their fix shipped. A shallow clone is the likely cause.
+    echo "error: the previously released commit $previous_source_commit is" \
+        "not in this repository, so the issues this release fixes cannot be" \
+        "derived" >&2
+    exit 1
+else
+    mapfile -t issues < <(
+        git log --format='%(trailers:key=Mirror-Issue,valueonly)' \
+            "$previous_source_commit..HEAD" |
+            sed -n "s%^$mirror_slug#\([0-9][0-9]*\)[[:space:]]*\$%\1%p" |
+            sort -u -n
+    )
+fi
+
+# The release commit is always built in a throwaway clone of the checkout,
+# pushed to the mirror the checkout points at. A rejected push then leaves
+# nothing behind, so the release is retried by running the command again
+# instead of by unwinding a commit and a tag by hand.
+scratch_dir="$(mktemp -d)"
+# shellcheck disable=SC2064  # expand the path now, not at exit
+trap "rm -rf -- '$scratch_dir'" EXIT
+release_root="$scratch_dir/mirror"
+git clone --quiet --shared "$mirror_root" "$release_root"
+git -C "$release_root" remote set-url origin "$mirror_origin"
+
+# One commit per release: replace the whole tree, so the mirror carries the
+# released snapshot and no history of how it was produced.
+find "$release_root" -mindepth 1 -maxdepth 1 -not -name .git \
+    -exec rm -rf -- {} +
+# git archive resolves the working directory inside the tree it archives, so it
+# runs from the top level.
+git -C "$monorepo_root" archive --format=tar "HEAD:$client_prefix" |
+    tar -x -C "$release_root"
+
+for internal_path in "${internal_paths[@]}"; do
+    rm -rf -- "${release_root:?}/$internal_path"
+done
+
+git -C "$release_root" add --all
+
+if git -C "$release_root" diff --cached --quiet; then
+    echo "error: the mirror already contains this tree" >&2
+    exit 1
+fi
+
+commit_message_file="$release_root/.git/albus-mirror-commit-message"
+cat > "$commit_message_file" <<EOF
+albus-cli $cli_version
+
+Developed in the private Albus repository and copied here by its release.
+Do not edit this repository; see CONTRIBUTING.md.
+
+Source-Commit: $source_commit
+EOF
+
+git -C "$release_root" commit --quiet --file "$commit_message_file"
+rm -f -- "$commit_message_file"
+git -C "$release_root" tag "$release_tag"
+
+if [[ "$dry_run" == true ]]; then
+    git -C "$release_root" --no-pager show --stat --oneline HEAD
+    echo
+    echo "Dry run complete. Nothing was pushed to $mirror_slug."
+    echo "Issues that would be closed: ${issues[*]:-none}"
+    exit 0
+fi
+
+git -C "$release_root" push --atomic origin \
+    "HEAD:refs/heads/master" "refs/tags/$release_tag"
+
+echo "Pushed albus-cli $cli_version to $mirror_slug as $release_tag."
+echo "The checkout you passed is behind the mirror now:" \
+    "git -C $mirror_root pull --ff-only"
+
+release_comment="Fixed in albus-cli $cli_version, now on PyPI: "
+release_comment+="https://pypi.org/project/albus-cli/$cli_version/"
+
+for issue in "${issues[@]}"; do
+    gh issue close "$issue" \
+        --repo "$mirror_slug" \
+        --reason completed \
+        --comment "$release_comment"
+done
+
+if [[ ${#issues[@]} -gt 0 ]]; then
+    echo "Closed $mirror_slug issues: ${issues[*]}"
+fi
