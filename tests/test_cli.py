@@ -41,7 +41,7 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
     assert call.name == "run_session"
     assert call.kwargs["id"] == "s1"
     assert call.kwargs["user_prompt"] == "hello"
-    assert call.kwargs["wait_timeout_seconds"] == 0
+    assert call.kwargs["wait_timeout_seconds"] is None
     agent = call.kwargs["agent"]
     assert agent.model.name == "gemini-3.6-flash"
     assert agent.model.provider is not None
@@ -89,7 +89,7 @@ def test_wait_flags_map_to_the_wait_timeout(albus: FakeAlbus) -> None:
     ]
 
     assert runner.invoke(app, [*args, "--no-wait"]).exit_code == 0
-    assert albus.calls[0].kwargs["wait_timeout_seconds"] is None
+    assert albus.calls[0].kwargs["wait_timeout_seconds"] == 0
 
     assert runner.invoke(app, [*args, "--wait-timeout", "5"]).exit_code == 0
     assert albus.calls[1].kwargs["wait_timeout_seconds"] == 5

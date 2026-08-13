@@ -176,7 +176,8 @@ def run(
         int | None,
         typer.Option(
             "--wait-timeout",
-            help="Seconds to block while waiting. Omit to wait indefinitely.",
+            help="Seconds to block while waiting. Omit to use the "
+            "server default.",
         ),
     ] = None,
 ) -> None:
@@ -199,9 +200,9 @@ def run(
         agent_name=agent_name,
         agent=agent,
         idempotency_key=idempotency_key,
-        # The server waits whenever the parameter is present, and 0 is
-        # its unbounded wait.
-        wait_timeout_seconds=(wait_timeout or 0) if wait else None,
+        # Omit the parameter to use the server's default wait; 0 returns
+        # immediately after the run is accepted.
+        wait_timeout_seconds=wait_timeout if wait else 0,
     )
     result = response.result.model_dump(mode="json", exclude_none=True)
     # The server names the invocation's effective key in a header, and the
