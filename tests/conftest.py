@@ -125,6 +125,19 @@ class FakeAuth:
 
 
 @dataclass
+class FakeModels:
+    calls: list[Call]
+
+    def list_models(self, **kwargs: Any) -> models.ListModelsResponse:
+        self.calls.append(Call("list_models", kwargs))
+        return models.ListModelsResponse(
+            models=[
+                models.ModelMeta(name="claude-opus-4-8", provider="anthropic")
+            ]
+        )
+
+
+@dataclass
 class FakeAlbus:
     init_kwargs: list[dict[str, Any]] = field(default_factory=list)
     calls: list[Call] = field(default_factory=list)
@@ -136,6 +149,7 @@ class FakeAlbus:
         self.tokens = FakeTokens(self.calls)
         self.health = FakeHealth(self.calls)
         self.invites = FakeInvites(self.calls)
+        self.models = FakeModels(self.calls)
 
     def __call__(self, **kwargs: Any) -> "FakeAlbus":
         self.init_kwargs.append(kwargs)

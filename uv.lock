@@ -8,7 +8,7 @@ resolution-markers = [
 
 [[package]]
 name = "albus-cli"
-version = "0.3.1"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "albus-sdk" },
@@ -24,7 +24,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "albus-sdk", specifier = "==0.8.1" },
+    { name = "albus-sdk", specifier = "==0.9.0" },
     { name = "typer", specifier = ">=0.26.8,<0.28" },
 ]
 
@@ -37,16 +37,16 @@ dev = [
 
 [[package]]
 name = "albus-sdk"
-version = "0.8.1"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpcore" },
     { name = "httpx" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/95/10463fa2ca6018f8083539355a183eca2853e9bedb1006fa6c6b3346341b/albus_sdk-0.8.1.tar.gz", hash = "sha256:9316bba326b14e37ca4969e5895f33130a77fab77ecc61b1b980de55ab715595", size = 67154, upload-time = "2026-08-13T16:23:45.193Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/35/52/3dfdcc881a2d0a99adc6f9c9cb4c64b9616aa9cb0dd10f812aa5f3471661/albus_sdk-0.9.0.tar.gz", hash = "sha256:0edfe7fd732d04e87d440e38a8f296ddc3eb5e6f8ef77335c409b1873313ba74", size = 67010, upload-time = "2026-08-14T15:24:58.288Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/97/90/5abfd5dd861f423ab150b5b4c670f6bfd82f11cd16930892299c1158f01e/albus_sdk-0.8.1-py3-none-any.whl", hash = "sha256:6c5e5c9a7eed440c43db7932066975bd51ff693dbb1a6d99a4ec154b1eb2b058", size = 95939, upload-time = "2026-08-13T16:23:44.169Z" },
+    { url = "https://files.pythonhosted.org/packages/da/20/13f398123fd17d653b84b1160409378302a9fa8f0c6600719d7cc782ef6d/albus_sdk-0.9.0-py3-none-any.whl", hash = "sha256:cc7736e37b03562263e620293e67286c2c58ee470067440c274437e1104e0581", size = 98238, upload-time = "2026-08-14T15:24:57.15Z" },
 ]
 
 [[package]]

@@ -115,7 +115,13 @@ albus tokens get "$id"
 albus tokens delete "$id"
 
 albus invites create teammate@example.com
+
+albus models list
 ```
+
+`models list` gives the model names `sessions run --model` takes, each with
+the provider it runs on — which is the provider the `--credential` secret has
+to be for.
 
 `tokens create` prints the only copy of the key value the API ever returns;
 `list` and `get` return metadata alone.

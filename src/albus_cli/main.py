@@ -15,6 +15,7 @@ from albus_cli.commands import (
     agents,
     auth,
     invites,
+    models,
     secrets,
     sessions,
     status,
@@ -39,6 +40,7 @@ app.add_typer(secrets.app, name="secrets")
 app.add_typer(agents.app, name="agents")
 app.add_typer(tokens.app, name="tokens")
 app.add_typer(invites.app, name="invites")
+app.add_typer(models.app, name="models")
 app.command("login")(auth.login)
 app.command("logout")(auth.logout)
 app.command("whoami")(auth.whoami)
