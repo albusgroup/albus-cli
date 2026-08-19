@@ -50,7 +50,37 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
     assert agent.max_steps == 5
     output = json.loads(result.stdout)
     assert output["session"]["id"] == "s1"
+    assert output["message"]["content"] == "hello back"
     assert output["idempotency_key"] == "inv-1"
+
+
+def test_a_run_that_has_not_answered_yet_carries_no_message(
+    albus: FakeAlbus,
+) -> None:
+    """`--no-wait` returns as soon as the run is accepted, so there is no
+    answer to print: an empty one would read as the agent's."""
+    albus.sessions.message = None
+
+    result = runner.invoke(
+        app,
+        [
+            "sessions",
+            "run",
+            "s1",
+            "-p",
+            "hello",
+            "--agent-name",
+            "triage",
+            "--model",
+            "m",
+            "--no-wait",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    output = json.loads(result.stdout)
+    assert output["session"]["id"] == "s1"
+    assert "message" not in output
 
 
 def test_waiting_run_disables_the_request_timeout(

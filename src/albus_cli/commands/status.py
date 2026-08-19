@@ -49,7 +49,7 @@ def status(ctx: typer.Context) -> None:
         return
 
     try:
-        report.update(_accepted(ctx, api, credential))
+        report.update(_accepted(ctx, api))
     except REFUSED as refused:
         # A credential that does not work is this command's answer, not its
         # failure: reporting it as an error would make the one command an
@@ -72,23 +72,15 @@ def _credential(api: str) -> str:
     return NONE
 
 
-def _accepted(ctx: typer.Context, api: str, credential: str) -> dict[str, Any]:
-    """What Albus says about the credential. The session is asked who it
-    belongs to; an API key is org-scoped and `/whoami` refuses it, so it
-    is spent on the cheapest operation it can authenticate instead, and
-    the report carries no identity for it."""
-    if credential == API_KEY:
-        client.client(api, timeout(ctx)).sessions.list_sessions()
-        return {"authenticated": True}
-
-    signed_in = client.signed_in_client(api, timeout(ctx)).auth.whoami()
+def _accepted(ctx: typer.Context, api: str) -> dict[str, Any]:
+    """What Albus says about the credential. `/whoami` names either
+    principal — the signed-in user, or the API key and the organization
+    it acts in — so one operation both verifies the credential the next
+    command sends and reports who it belongs to."""
+    caller = client.client(api, timeout(ctx)).auth.whoami()
     return {
         "authenticated": True,
-        "email": signed_in.email,
-        "organizations": [
-            organization.model_dump(mode="json", exclude_none=True)
-            for organization in signed_in.organizations
-        ],
+        "caller": caller.model_dump(mode="json", exclude_none=True),
     }
 
 

@@ -10,7 +10,7 @@ from typing import Annotated
 import typer
 
 from albus_cli import client, credentials, docs, oauth, output
-from albus_cli.context import base_url, signed_in_sdk, timeout
+from albus_cli.context import base_url, sdk, timeout
 
 NoBrowser = Annotated[
     bool,
@@ -40,7 +40,10 @@ def login(ctx: typer.Context, no_browser: NoBrowser = False) -> None:
     # Read the account back through the session just stored, not through
     # precedence: naming the API key's account would be a false report.
     signed_in = client.bearer_client(api, timeout(ctx), session)
-    output.done(f"Signed in as {signed_in.auth.whoami().email}")
+    # A browser session authenticates a user, so `/whoami` names one;
+    # an account it did not name is not one to claim under "Signed in".
+    user = signed_in.auth.whoami().user
+    output.done("Signed in" if user is None else f"Signed in as {user.email}")
     output.field("API", api)
     output.field("Credential", output.abbreviated(credentials.path()))
     if session.refresh_token is None:
@@ -62,8 +65,8 @@ def logout(ctx: typer.Context) -> None:
 
 
 def whoami(ctx: typer.Context) -> None:
-    """Show the signed-in account and its organizations."""
-    output.emit(signed_in_sdk(ctx).auth.whoami())
+    """Show the caller the credential authenticates."""
+    output.emit(sdk(ctx).auth.whoami())
 
 
 def _next_steps() -> None:

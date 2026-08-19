@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 import pytest
-from albus_sdk import errors
+from albus_sdk import errors, models
 from typer.testing import CliRunner
 
 from albus_cli import client, credentials
@@ -74,27 +74,40 @@ def test_a_stored_session_is_named_with_the_account_it_belongs_to(
 
     assert report["credential"] == "session"
     assert report["authenticated"] is True
-    assert report["email"] == "carlo@albus.sh"
-    assert report["organizations"] == [
-        {"id": "o1", "name": "Albus", "roles": ["owner"]}
-    ]
+    assert report["caller"] == {
+        "user": {
+            "user_id": "u1",
+            "email": "carlo@albus.sh",
+            "organizations": [{"id": "o1", "name": "Albus", "roles": ["owner"]}],
+        }
+    }
     assert albus.calls[-1].name == "whoami"
 
 
-def test_an_api_key_wins_over_a_stored_session_and_carries_no_identity(
-    albus: FakeAlbus,
+def test_an_api_key_wins_over_a_stored_session_and_names_the_key(
+    albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`/whoami` refuses an org-scoped key, so the key is verified on an
-    operation it can authenticate and the report names no account —
-    reporting the session's would name a credential nothing will send."""
+    """Reporting the session's account would name a credential nothing
+    will send: `/whoami` takes the key too, and names it."""
     signed_in()
+    monkeypatch.setattr(albus.auth, "whoami", api_key_caller)
 
     report = reported()
 
     assert report["credential"] == "api_key"
     assert report["authenticated"] is True
-    assert "email" not in report
-    assert albus.calls[-1].name == "list_sessions"
+    assert report["caller"] == {
+        "api_key": {"name": "ci", "organization_id": "o1"}
+    }
+    assert albus.init_kwargs[0]["api_key"] == "test-key"
+
+
+def api_key_caller(**kwargs: object) -> models.WhoamiResponse:
+    """What `/whoami` answers an API key: the key and the organization it
+    acts in, and no user."""
+    return models.WhoamiResponse(
+        api_key=models.AuthenticatedAPIKey(name="ci", organization_id="o1")
+    )
 
 
 def test_a_rejected_credential_is_the_answer_not_a_failure(
@@ -109,7 +122,7 @@ def test_a_rejected_credential_is_the_answer_not_a_failure(
             httpx.Response(401, text='{"message": "unauthorized"}'),
         )
 
-    monkeypatch.setattr(albus.sessions, "list_sessions", unauthorized)
+    monkeypatch.setattr(albus.auth, "whoami", unauthorized)
 
     report = reported()
 
@@ -154,7 +167,7 @@ def test_an_unreachable_api_is_reported(
     def unreachable(**kwargs: object) -> None:
         raise httpx.ConnectError("connection refused")
 
-    monkeypatch.setattr(albus.sessions, "list_sessions", unreachable)
+    monkeypatch.setattr(albus.auth, "whoami", unreachable)
 
     report = reported()
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "albus-cli"
-version = "0.4.0"
+version = "0.4.1"
 description = "Command-line client for the Albus REST API"
 readme = "README.md"
 license = "MIT"
@@ -13,7 +13,7 @@ authors = [{ name = "Albus" }]
 dependencies = [
     # Pinned, not floated: the published CLI states the one SDK version it was
     # tested against, and bumping it is a reviewed edit made when releasing.
-    "albus-sdk==0.9.0",
+    "albus-sdk==0.10.0",
     "typer>=0.26.8,<0.28",
 ]
 

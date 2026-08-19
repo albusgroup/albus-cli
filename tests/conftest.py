@@ -5,22 +5,29 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from albus_sdk import models
+from albus_sdk import models, operations
 
 import albus_cli.client
 
 
-def session_response() -> models.SessionResponse:
+def session() -> models.Session:
     now = datetime(2026, 1, 1, tzinfo=UTC)
-    return models.SessionResponse(
-        session=models.Session(
-            id="s1",
-            state="DONE",
-            invocation_count=1,
-            created_at=now,
-            updated_at=now,
-        ),
-        messages=[],
+    return models.Session(
+        id="s1",
+        state="DONE",
+        invocation_count=1,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def assistant_message() -> models.SessionMessage:
+    return models.SessionMessage(
+        cursor=1,
+        invocation_id="inv-1",
+        role="assistant",
+        content="hello back",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
 
@@ -42,17 +49,24 @@ class FakeSessions:
     headers: dict[str, list[str]] = field(
         default_factory=lambda: {"idempotency-key": ["inv-1"]}
     )
+    # A run that has not answered yet returns no message, which is what a
+    # `--no-wait` invocation gets.
+    message: models.SessionMessage | None = field(
+        default_factory=assistant_message
+    )
 
-    def run_session(self, **kwargs: Any) -> models.RunSessionResponse:
+    def run_session(self, **kwargs: Any) -> operations.RunSessionResponse:
         self.calls.append(Call("run_session", kwargs))
-        return models.RunSessionResponse(
+        return operations.RunSessionResponse(
             headers=self.headers,
-            result=session_response(),
+            result=models.RunSessionResponse(
+                session=session(), message=self.message
+            ),
         )
 
     def list_sessions(self, **kwargs: Any) -> models.ListSessionsResponse:
         self.calls.append(Call("list_sessions", kwargs))
-        return models.ListSessionsResponse(sessions=[session_response().session])
+        return models.ListSessionsResponse(sessions=[session()])
 
 
 @dataclass
@@ -114,13 +128,15 @@ class FakeAuth:
     def whoami(self, **kwargs: Any) -> models.WhoamiResponse:
         self.calls.append(Call("whoami", kwargs))
         return models.WhoamiResponse(
-            user_id="u1",
-            email="carlo@albus.sh",
-            organizations=[
-                models.OrganizationMembership(
-                    id="o1", name="Albus", roles=["owner"]
-                )
-            ],
+            user=models.AuthenticatedUser(
+                user_id="u1",
+                email="carlo@albus.sh",
+                organizations=[
+                    models.OrganizationMembership(
+                        id="o1", name="Albus", roles=["owner"]
+                    )
+                ],
+            )
         )
 
 

@@ -261,8 +261,8 @@ def test_login_names_the_account_it_just_signed_in_as(
     albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Reading the account back through precedence would name whoever
-    the API key belongs to, under "Signed in as", and would 401 first:
-    `/whoami` accepts a bearer token only."""
+    the API key belongs to, under "Signed in as": `/whoami` answers for
+    whichever credential it was sent."""
     monkeypatch.setenv(client.API_KEY_ENV, "env-key")
     signs_in(monkeypatch)
 
@@ -431,30 +431,28 @@ def unauthorized(**kwargs: object) -> None:
     )
 
 
-def test_whoami_uses_the_session_over_an_api_key(
+def test_whoami_names_the_caller_the_next_command_sends(
     albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """`/whoami` takes either credential, so it answers for the one
+    precedence resolves — the key, here, shadowing the session."""
     monkeypatch.setenv(client.API_KEY_ENV, "env-key")
     stored(expires_in=3600)
 
     assert runner.invoke(app, ["whoami"]).exit_code == 0
-    assert albus.init_kwargs[0]["access_token"] == "stored-access"
-    assert albus.init_kwargs[0]["api_key"] is None
+    assert albus.init_kwargs[0]["api_key"] == "env-key"
+    assert albus.init_kwargs[0]["access_token"] is None
 
 
-def test_whoami_with_only_an_api_key_asks_for_a_sign_in(
-    albus: FakeAlbus,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+def test_whoami_works_with_only_an_api_key(
+    albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(client.API_KEY_ENV, "env-key")
-    fails(monkeypatch, "whoami")
 
-    reported = capsys.readouterr().err
-    assert "needs a browser session" in reported
-    assert "ALBUS_API_KEY cannot stand in" in reported
-    assert "albus login" in reported
-    assert albus.calls == []
+    result = runner.invoke(app, ["whoami"])
+
+    assert result.exit_code == 0, result.output
+    assert albus.calls[0].name == "whoami"
 
 
 def test_login_keys_the_session_by_the_base_url(
@@ -523,7 +521,7 @@ def test_whoami_prints_the_account(signed_out: FakeAlbus) -> None:
     result = runner.invoke(app, ["whoami"])
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout)["email"] == "carlo@albus.sh"
+    assert json.loads(result.stdout)["user"]["email"] == "carlo@albus.sh"
     assert signed_out.calls[0].name == "whoami"
 
 
