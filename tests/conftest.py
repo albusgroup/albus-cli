@@ -24,7 +24,7 @@ def session() -> models.Session:
 def assistant_message() -> models.SessionMessage:
     return models.SessionMessage(
         cursor=1,
-        invocation_id="inv-1",
+        invocation_key="inv-1",
         role="assistant",
         content="hello back",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -49,8 +49,8 @@ class FakeSessions:
     headers: dict[str, list[str]] = field(
         default_factory=lambda: {"idempotency-key": ["inv-1"]}
     )
-    # A run that has not answered yet returns no message, which is what a
-    # `--no-wait` invocation gets.
+    # An invocation that has not answered yet returns no message, which is
+    # what a `--no-wait` invocation gets.
     message: models.SessionMessage | None = field(
         default_factory=assistant_message
     )

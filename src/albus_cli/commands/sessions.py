@@ -31,6 +31,25 @@ After = Annotated[
 Limit = Annotated[int, typer.Option("--limit", help="Page size.")]
 
 
+def tool_blocks(names: list[str]) -> models.Tools | None:
+    """The tool blocks the named tools offer the model."""
+    if not names:
+        return None
+
+    blocks = models.Tools()
+    for name in names:
+        if name == "web_search":
+            blocks.web_search = models.WebSearchTool()
+        elif name == "terminal":
+            blocks.terminal = models.TerminalTool()
+        else:
+            raise typer.BadParameter(
+                f"unknown tool {name!r}: choose web_search or terminal"
+            )
+
+    return blocks
+
+
 def agent_config(
     agent_file: Path | None,
     model: str | None,
@@ -74,7 +93,7 @@ def agent_config(
 
     return models.AgentConfig(
         model=models.Model(name=model, provider=provider_config),
-        tools=tools or None,
+        tools=tool_blocks(tools),
         system_prompt=system_prompt,
         max_steps=max_steps,
     )
@@ -138,13 +157,15 @@ def run(
         list[str] | None,
         typer.Option(
             "--tool",
-            help="Tool the model may call. Repeat to allow several.",
+            help="Tool the model may call (web_search, terminal). "
+            "Repeat to allow several.",
         ),
     ] = None,
     max_steps: Annotated[
         int | None,
         typer.Option(
-            "--max-steps", help="Max model steps before the run stops."
+            "--max-steps",
+            help="Max model steps before the agent stops.",
         ),
     ] = None,
     agent_file: Annotated[
@@ -158,11 +179,12 @@ def run(
             "configurations the flags do not cover (e.g. MCP servers).",
         ),
     ] = None,
-    idempotency_key: Annotated[
+    invocation_key: Annotated[
         str | None,
         typer.Option(
-            "--idempotency-key",
-            help="Identifies this invocation so the call is retry-safe.",
+            "--invocation-key",
+            help="Names this invocation so the call is retry-safe and the "
+            "invocation can be read back by key.",
         ),
     ] = None,
     wait: Annotated[
@@ -192,26 +214,26 @@ def run(
         max_steps,
     )
     timeout = options(ctx).timeout
-    # A waiting run long-polls, so it outlives the request timeout.
+    # A waiting invocation long-polls, so it outlives the request timeout.
     albus = client(base_url(ctx), None if wait else timeout)
     response = albus.sessions.run_session(
         id=session_id,
         user_prompt=prompt,
         agent_name=agent_name,
         agent=agent,
-        idempotency_key=idempotency_key,
+        invocation_key=invocation_key,
         # Omit the parameter to use the server's default wait; 0 returns
-        # immediately after the run is accepted.
+        # immediately after the invocation is accepted.
         wait_timeout_seconds=wait_timeout if wait else 0,
     )
     result = response.result.model_dump(mode="json", exclude_none=True)
     # The server names the invocation's effective key in a header, and the
     # key the caller supplied is that value; a proxy that drops the header
-    # is not a reason to lose the run's output.
+    # is not a reason to lose the invocation's output.
     served = response.headers.get("idempotency-key", [])
-    effective = served[0] if served else idempotency_key
+    effective = served[0] if served else invocation_key
     if effective is not None:
-        result["idempotency_key"] = effective
+        result["invocation_key"] = effective
 
     emit(result)
 

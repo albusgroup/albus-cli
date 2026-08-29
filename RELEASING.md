@@ -1,10 +1,12 @@
 # Releasing the Albus CLI
 
-A release is a maintainer running the scripts below from a clean, up-to-date
-`master` checkout of the private Albus repository: they run `./tools/check`,
-upload to PyPI or TestPyPI, push the released tree to the public mirror as a
-single tagged commit, and close the mirror issues the release fixes. Nothing
-publishes from CI, on push, on tag, or on merge.
+A release runs the scripts below from a clean, up-to-date `master` checkout of
+the private Albus repository — by a maintainer locally, or by the dispatched
+release workflow described in
+[Releasing from GitHub Actions](#releasing-from-github-actions). Either way they
+run `./tools/check`, upload to PyPI or TestPyPI, push the released tree to the
+public mirror as a single tagged commit, and close the mirror issues the release
+fixes. Nothing publishes on push, on tag, or on merge.
 
 ## One-time PyPI setup
 
@@ -28,6 +30,18 @@ re-upload.
 Bump the `albus-sdk==…` pin in the same pull request when the CLI needs a newer
 SDK, and release that SDK version first: the pin must name a version that is on
 PyPI, or the published CLI is uninstallable.
+
+`tools/bump-sdk` makes that edit:
+
+```bash
+./tools/bump-sdk 0.11.0 0.2.0
+```
+
+It rewrites the pin and `project.version`, relocks, and checks that `uv.lock`
+resolved the SDK version you named — which is also how an SDK release that did
+not actually reach PyPI is caught. It leaves the edit uncommitted, because the
+edit is a pull request. The release workflow runs the same script and opens
+that pull request itself.
 
 ## Validate
 
@@ -68,6 +82,27 @@ uv tool install albus-cli==0.2.0
 albus --help
 ```
 
+## Releasing from GitHub Actions
+
+A release running in GitHub Actions passes `--non-interactive`, which skips the
+confirmation prompt because the dispatch already authorized the upload: a
+maintainer with write access typed the version in and turned `dry_run` off.
+The flag is refused when `GITHUB_ACTIONS` is unset: a phrase a script can type
+is not a confirmation, so a local release keeps the prompt.
+Deciding that from the environment is a guard against skipping the prompt out
+of habit, not a boundary — `UV_PUBLISH_TOKEN` is what authorizes an upload, and
+a maintainer holding it can already publish.
+
+Actions checks out a detached `HEAD` with no upstream configured, so there the
+publisher proves the same invariant against `GITHUB_REF` instead — the ref must
+be a branch, `origin` must have it, and it must point at the commit being
+released. Uploads still only run from `master`.
+
+The CLI is published by its own dispatch, after the pull request that bumps the
+`albus-sdk` pin and the CLI version has been reviewed and merged: the pin has
+to name an SDK version that is already on PyPI. See
+[`client-release-automation.md`](../../.agents/plans/client-release-automation.md).
+
 ## Copy the release to the public mirror
 
 ```bash
@@ -91,9 +126,10 @@ and this one, and closes each issue with the version that carries the fix. A
 reporter cannot see the private fix, so the release closing the issue is the
 only signal they get.
 
-Your own `git` and `gh` credentials do the push and the issue closing; there is
-no stored mirror token. Pushing `.github/workflows/` to the mirror needs a
-credential with workflow scope.
+A maintainer's own `git` and `gh` credentials do the push and the issue
+closing; in Actions they come from the release workflow's token. Pushing
+`.github/workflows/` to the mirror needs a credential allowed to write workflow
+files.
 
 The checkout you pass is only read: the release commit is built in a throwaway
 clone of it, so a rejected push — the likely first-release outcome, since the

@@ -7,6 +7,38 @@
 
 release_branch=""
 
+# The local guards read the checked-out branch's upstream to prove that the
+# commit being released is the one on the remote. Actions checks out a detached
+# HEAD with no branch configuration, so there the same invariant is asserted
+# directly against the ref the workflow was dispatched on.
+require_actions_release_state() {
+    local branch remote_output remote_sha local_sha
+
+    if [[ "${GITHUB_REF:-}" != refs/heads/* ]]; then
+        echo "error: releases run from a branch, not ${GITHUB_REF:-no ref}" >&2
+        exit 1
+    fi
+
+    branch="${GITHUB_REF#refs/heads/}"
+
+    if ! remote_output="$(
+        git ls-remote --exit-code --refs origin "refs/heads/$branch"
+    )"; then
+        echo "error: origin has no branch $branch" >&2
+        exit 1
+    fi
+
+    remote_sha="$(awk 'NR == 1 { print $1 }' <<<"$remote_output")"
+    local_sha="$(git rev-parse HEAD)"
+    if [[ "$remote_sha" != "$local_sha" ]]; then
+        echo "error: HEAD is not the commit on origin/$branch" >&2
+        exit 1
+    fi
+
+    # shellcheck disable=SC2034  # read by the sourcing script
+    release_branch="$branch"
+}
+
 require_release_state() {
     local cli_version="$1"
     local toml_version branch remote merge_ref remote_output
@@ -24,6 +56,11 @@ require_release_state() {
     if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
         echo "error: releases require a clean worktree" >&2
         exit 1
+    fi
+
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        require_actions_release_state
+        return
     fi
 
     branch="$(git symbolic-ref --quiet --short HEAD || true)"

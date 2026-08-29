@@ -1,5 +1,5 @@
 """`albus models list` is where a reader finds the name `sessions run
---model` takes, so it has to answer with the API key that a run uses
+--model` takes, so it has to answer with the API key an invocation uses
 rather than the browser session `/tokens` needs."""
 
 import json

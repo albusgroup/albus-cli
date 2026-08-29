@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# Move albus-cli onto a published albus-sdk version, and set its own version.
+
+set -Eeuo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/.." && pwd)"
+
+usage() {
+    cat >&2 <<EOF
+usage: $0 <sdk-version> <cli-version>
+
+Pin albus-sdk to <sdk-version>, set the CLI's version to <cli-version>, and
+relock. The SDK version has to be on PyPI already, since that is where uv
+resolves the pin from.
+
+The edit is not committed: it is the content of the pull request a release
+opens, and a released CLI names an SDK version a human agreed to.
+EOF
+}
+
+if [[ $# -ne 2 ]]; then
+    usage
+    exit 2
+fi
+
+sdk_version="$1"
+cli_version="$2"
+
+for command in uv; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "error: required command not found: $command" >&2
+        exit 1
+    fi
+done
+
+cd "$repo_root"
+
+# Both edits are anchored and counted: a pattern that stopped matching would
+# otherwise leave the pin or the version silently untouched, and the release
+# would publish a CLI that says it depends on the SDK it was already on.
+replace_once() {
+    local pattern="$1" replacement="$2" description="$3" matches
+    matches="$(grep -c "$pattern" pyproject.toml || true)"
+    if [[ "$matches" != 1 ]]; then
+        echo "error: pyproject.toml has $matches lines matching the" \
+            "$description, expected 1" >&2
+        exit 1
+    fi
+
+    sed -i.bak "s/$pattern/$replacement/" pyproject.toml
+    rm -f pyproject.toml.bak
+}
+
+current_cli_version="$(
+    sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml
+)"
+if [[ "$current_cli_version" == "$cli_version" ]]; then
+    echo "error: the CLI is already $cli_version, and a published version" \
+        "cannot be replaced" >&2
+    exit 1
+fi
+
+replace_once \
+    '^version = ".*"$' \
+    "version = \"$cli_version\"" \
+    "CLI version"
+replace_once \
+    '^\( *\)"albus-sdk==.*",$' \
+    "\\1\"albus-sdk==$sdk_version\"," \
+    "albus-sdk pin"
+
+# uv resolves the pin against PyPI, so this is also the check that the SDK
+# release actually landed: an unpublished version fails here rather than in
+# the first install of the published CLI.
+uv lock
+
+locked_sdk_version="$(
+    uv export --frozen --no-hashes --no-emit-project |
+        sed -n 's/^albus-sdk==\([^ ;]*\).*/\1/p'
+)"
+if [[ "$locked_sdk_version" != "$sdk_version" ]]; then
+    echo "error: uv.lock resolved albus-sdk $locked_sdk_version," \
+        "expected $sdk_version" >&2
+    exit 1
+fi
+
+echo "albus-cli $current_cli_version -> $cli_version on albus-sdk $sdk_version"

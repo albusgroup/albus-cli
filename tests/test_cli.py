@@ -3,7 +3,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from albus_sdk import errors
+from albus_sdk import errors, models
 from typer.testing import CliRunner
 
 from albus_cli.main import app, main
@@ -30,7 +30,7 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
             "--credential",
             "albus.sh/secrets/key",
             "--tool",
-            "WEB_SEARCH",
+            "web_search",
             "--max-steps",
             "5",
         ],
@@ -46,18 +46,18 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
     assert agent.model.name == "gemini-3.6-flash"
     assert agent.model.provider is not None
     assert agent.model.provider.credential == "albus.sh/secrets/key"
-    assert agent.tools == ["WEB_SEARCH"]
+    assert agent.tools == models.Tools(web_search=models.WebSearchTool())
     assert agent.max_steps == 5
     output = json.loads(result.stdout)
     assert output["session"]["id"] == "s1"
     assert output["message"]["content"] == "hello back"
-    assert output["idempotency_key"] == "inv-1"
+    assert output["invocation_key"] == "inv-1"
 
 
-def test_a_run_that_has_not_answered_yet_carries_no_message(
+def test_an_invocation_that_has_not_answered_yet_carries_no_message(
     albus: FakeAlbus,
 ) -> None:
-    """`--no-wait` returns as soon as the run is accepted, so there is no
+    """`--no-wait` returns as soon as the invocation is accepted, so there is no
     answer to print: an empty one would read as the agent's."""
     albus.sessions.message = None
 
@@ -233,7 +233,7 @@ def test_invalid_agent_file_reports_the_first_problem(
     assert albus.calls == []
 
 
-def test_run_survives_a_missing_idempotency_header(albus: FakeAlbus) -> None:
+def test_run_survives_a_missing_invocation_key_header(albus: FakeAlbus) -> None:
     """A proxy that strips the header must not cost the run's output."""
     albus.sessions.headers = {}
     result = runner.invoke(
@@ -248,13 +248,13 @@ def test_run_survives_a_missing_idempotency_header(albus: FakeAlbus) -> None:
             "triage",
             "--model",
             "m",
-            "--idempotency-key",
+            "--invocation-key",
             "mine",
         ],
     )
 
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout)["idempotency_key"] == "mine"
+    assert json.loads(result.stdout)["invocation_key"] == "mine"
 
 
 def test_unreachable_api_names_the_base_url(

@@ -8,16 +8,20 @@ repo_root="$(cd -- "$script_dir/.." && pwd)"
 
 usage() {
     cat >&2 <<EOF
-usage: $0 [--dry-run] [--testpypi] <cli-version>
+usage: $0 [--dry-run] [--testpypi] [--non-interactive] <cli-version>
 
 Build and publish albus-cli from a clean, pushed commit.
 
-  --dry-run    Validate the complete release without uploading.
-  --testpypi   Target TestPyPI instead of production PyPI.
+  --dry-run          Validate the complete release without uploading.
+  --testpypi         Target TestPyPI instead of production PyPI.
+  --non-interactive  Upload without the typed confirmation. Valid only in
+                     GitHub Actions, where the release environment's required
+                     reviewer approves the run instead.
 EOF
 }
 
 dry_run=false
+non_interactive=false
 repository="pypi"
 
 while [[ $# -gt 0 ]]; do
@@ -28,6 +32,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --testpypi)
             repository="testpypi"
+            shift
+            ;;
+        --non-interactive)
+            non_interactive=true
             shift
             ;;
         -h|--help)
@@ -51,6 +59,16 @@ if [[ $# -ne 1 ]]; then
 fi
 
 cli_version="$1"
+
+# A confirmation a script can supply is a confirmation a script can hard-code,
+# so the flag only means anything where an approval already gated the run. The
+# check keeps the prompt from being skipped by habit locally; it is not a
+# security boundary, since anyone holding UV_PUBLISH_TOKEN can already upload.
+if [[ "$non_interactive" == true && "${GITHUB_ACTIONS:-}" != "true" ]]; then
+    echo "error: --non-interactive is for GitHub Actions, where the release" \
+        "environment's required reviewer is the confirmation" >&2
+    exit 1
+fi
 
 for command in git uv; do
     if ! command -v "$command" >/dev/null 2>&1; then
@@ -114,16 +132,18 @@ if [[ "$repository" == "testpypi" ]]; then
     repository_label="TestPyPI"
 fi
 
-if [[ ! -t 0 ]]; then
-    echo "error: publishing requires an interactive confirmation" >&2
-    exit 1
-fi
+if [[ "$non_interactive" == false ]]; then
+    if [[ ! -t 0 ]]; then
+        echo "error: publishing requires an interactive confirmation" >&2
+        exit 1
+    fi
 
-confirmation_prompt="publish $cli_version to $repository_label"
-read -r -p "Type '$confirmation_prompt' to continue: " confirmation
-if [[ "$confirmation" != "$confirmation_prompt" ]]; then
-    echo "Publication cancelled." >&2
-    exit 1
+    confirmation_prompt="publish $cli_version to $repository_label"
+    read -r -p "Type '$confirmation_prompt' to continue: " confirmation
+    if [[ "$confirmation" != "$confirmation_prompt" ]]; then
+        echo "Publication cancelled." >&2
+        exit 1
+    fi
 fi
 
 # The token stays in the environment, where uv reads it: an argument is
