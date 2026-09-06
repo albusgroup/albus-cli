@@ -1,7 +1,6 @@
-"""`albus invites create` maps to `createInvite`, sending the email alone
-and leaving `role` and `organization_id` to the API: one user is one
-organization for the beta. `/invites` is `bearerAuth`-only, so an API key
-must not be sent."""
+"""`albus invites create` maps to `createInvite`, which joins the invitee
+to the caller's active organization. `/organization/invites` is
+`bearerAuth`-only, so an API key must not be sent."""
 
 import json
 import time
@@ -24,7 +23,7 @@ BASE_URL = "https://albus.sh/api"
 def signed_in(
     albus: FakeAlbus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> FakeAlbus:
-    """A stored browser session, which is what `/invites` accepts."""
+    """A stored browser session, which `/organization/invites` accepts."""
     monkeypatch.setenv(credentials.CONFIG_DIR_ENV, str(tmp_path / "config"))
     monkeypatch.delenv(credentials.XDG_CONFIG_HOME_ENV, raising=False)
     monkeypatch.delenv(client.API_KEY_ENV, raising=False)
@@ -39,20 +38,39 @@ def signed_in(
     return albus
 
 
-def test_create_sends_only_the_email(signed_in: FakeAlbus) -> None:
+def test_create_leaves_the_role_to_the_api(signed_in: FakeAlbus) -> None:
     result = runner.invoke(app, ["invites", "create", "new@example.com"])
 
     assert result.exit_code == 0, result.output
     call = signed_in.calls[0]
     assert call.name == "create_invite"
-    assert call.kwargs == {"email": "new@example.com"}
+    assert call.kwargs == {"email": "new@example.com", "role": None}
     assert json.loads(result.stdout)["id"] == "i1"
+
+
+def test_create_sends_the_chosen_role(signed_in: FakeAlbus) -> None:
+    result = runner.invoke(
+        app, ["invites", "create", "new@example.com", "--role", "admin"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert signed_in.calls[0].kwargs["role"] == "admin"
+
+
+def test_create_rejects_an_unknown_role(signed_in: FakeAlbus) -> None:
+    result = runner.invoke(
+        app, ["invites", "create", "new@example.com", "--role", "owner"]
+    )
+
+    assert result.exit_code != 0
+    assert signed_in.calls == []
 
 
 def test_the_session_is_used_over_an_api_key(
     signed_in: FakeAlbus, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An API key is a 401 at `/invites`, so precedence must not send it."""
+    """An API key is a 401 at `/organization/invites`; precedence must not
+    send it."""
     monkeypatch.setenv(client.API_KEY_ENV, "env-key")
 
     result = runner.invoke(app, ["invites", "create", "new@example.com"])
@@ -60,3 +78,21 @@ def test_the_session_is_used_over_an_api_key(
     assert result.exit_code == 0, result.output
     assert signed_in.init_kwargs[0]["access_token"] == "stored-access"
     assert signed_in.init_kwargs[0]["api_key"] is None
+
+
+def test_list(signed_in: FakeAlbus) -> None:
+    result = runner.invoke(app, ["invites", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert signed_in.calls[0].name == "list_invites"
+    assert json.loads(result.stdout)["invites"][0]["id"] == "i1"
+    assert signed_in.init_kwargs[0]["api_key"] is None
+
+
+def test_revoke_prints_nothing(signed_in: FakeAlbus) -> None:
+    result = runner.invoke(app, ["invites", "revoke", "i1"])
+
+    assert result.exit_code == 0, result.output
+    assert signed_in.calls[0].name == "revoke_invite"
+    assert signed_in.calls[0].kwargs == {"id": "i1"}
+    assert result.stdout == ""

@@ -63,7 +63,11 @@ export ALBUS_BASE_URL=http://localhost:8080/api  # optional; defaults to prod
 ```
 
 `--base-url` overrides `ALBUS_BASE_URL`, and `--timeout` bounds each request
-(a waiting `sessions run` long-polls and is exempt).
+(a waiting `sessions run` long-polls and is exempt). A user who belongs to
+several organizations acts in the one joined first; `--org <organization id>`
+(or `ALBUS_ORG`) selects another, and `albus whoami` lists them under
+`organizations` with the selected one as `active_organization`. An API key is
+bound to its organization and ignores `--org`.
 
 `albus login` opens a browser on this machine and listens on
 `127.0.0.1:8484-8487`; on a headless host, forward those ports or export
@@ -100,7 +104,11 @@ albus sessions run my-session -p "and the follow-up?" \
 albus sessions list
 albus sessions get my-session --limit 20
 albus sessions audit my-session --after "$cursor"
+albus sessions cancel my-session
 albus sessions delete my-session
+
+albus traces list --agent-name support-triage --status FAILED
+albus traces get "$invocation_key" --no-payloads --attempts all
 
 albus secrets list
 albus secrets create gemini-key --value ...   # or pipe the value on stdin
@@ -117,10 +125,31 @@ albus tokens create ci
 albus tokens get "$id"
 albus tokens delete "$id"
 
+albus invites list
 albus invites create teammate@example.com
+albus invites revoke "$id"
+
+albus organization get
+albus organization rename "Albus Labs"
+albus organization members
+albus organization set-role "$user_id" admin
+albus organization remove-member "$user_id"
+
+albus billing balance
+albus billing ledger --after "$cursor"
+albus billing checkout 20 --success-url https://... --cancel-url https://...
 
 albus models list
+
+albus memories groups
+albus memories list --group team-a
+albus memories delete "$id" --group team-a
+albus memories delete-group --group team-a
 ```
+
+`memories groups` lists the organization's memory groups with their active
+counts; `memories list --group` reads one group's memories, newest first. Both
+page with `--after` and `--limit`.
 
 `models list` gives the model names `sessions run --model` takes, each with
 the provider it runs on — which is the provider the `--credential` secret has
@@ -129,9 +158,19 @@ to be for.
 `tokens create` prints the only copy of the key value the API ever returns;
 `list` and `get` return metadata alone.
 
-`invites create` invites a person by email, and they get their own
-organization on first sign-in. `CreateInviteRequest`'s `role` and
-`organization_id` have no flags: one user is one organization for the beta.
+`invites create` invites a person by email to join your active organization,
+as a `member` unless `--role admin` says otherwise. `invites list` and
+`invites revoke`, like the `organization` member commands, need the admin
+role.
+
+`billing checkout` starts a credit purchase and prints the payment page URL
+to send the buyer to; like `tokens` and `invites`, it needs `albus login`
+rather than an API key. `billing balance` and `billing ledger` take either.
+
+`traces list` searches the last 31 days of invocations unless `--since` and
+`--until` say otherwise; `traces get` reads one with a page of its spans, and
+`--no-payloads` returns the shape without what each span was given and
+produced.
 
 `sessions run` waits for the assistant response by default; pass `--no-wait`
 to return as soon as the invocation is accepted, or `--wait-timeout` to bound

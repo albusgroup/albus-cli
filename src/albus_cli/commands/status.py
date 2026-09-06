@@ -15,7 +15,7 @@ import typer
 from albus_sdk import errors
 
 from albus_cli import client, credentials, oauth, output
-from albus_cli.context import base_url, timeout
+from albus_cli.context import base_url, organization, timeout
 
 # Everything that answers "the credential does not work": Albus refusing it, a
 # stored session that cannot be renewed, an Auth0 tenant that is unconfigured
@@ -77,7 +77,7 @@ def _accepted(ctx: typer.Context, api: str) -> dict[str, Any]:
     principal — the signed-in user, or the API key and the organization
     it acts in — so one operation both verifies the credential the next
     command sends and reports who it belongs to."""
-    caller = client.client(api, timeout(ctx)).auth.whoami()
+    caller = client.client(api, timeout(ctx), organization(ctx)).auth.whoami()
     return {
         "authenticated": True,
         "caller": caller.model_dump(mode="json", exclude_none=True),

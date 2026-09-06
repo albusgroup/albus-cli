@@ -18,6 +18,11 @@ from albus_cli.credentials import Credential
 
 API_KEY_ENV = "ALBUS_API_KEY"
 BASE_URL_ENV = "ALBUS_BASE_URL"
+ORGANIZATION_ENV = "ALBUS_ORG"
+
+# Selects among the signed-in user's organizations. An API key is bound to
+# one already, and the server ignores the header for it.
+ORGANIZATION_HEADER = "X-Albus-Organization"
 
 # Renew slightly early: an access token that outlives the request it is
 # sent on is not worth the 401.
@@ -53,22 +58,29 @@ def api_key() -> str | None:
     return os.environ.get(API_KEY_ENV)
 
 
-def client(base_url: str, timeout: float | None) -> Albus:
-    """Build an SDK client. A timeout of None disables the read timeout."""
+def client(
+    base_url: str, timeout: float | None, organization: str | None
+) -> Albus:
+    """Build an SDK client. A timeout of None disables the read timeout;
+    an organization selects which of the user's the requests act in."""
     key = api_key()
     if key:
         # The environment wins over a stored session deliberately, so CI
         # and agent harnesses inject a credential without touching disk.
-        return _client(base_url, timeout, api_key=key)
+        return _client(base_url, timeout, organization, api_key=key)
 
     stored = credentials.load(base_url)
     if stored is None:
         raise _signed_out(base_url)
 
-    return bearer_client(base_url, timeout, _current(base_url, stored))
+    return bearer_client(
+        base_url, timeout, organization, _current(base_url, stored)
+    )
 
 
-def signed_in_client(base_url: str, timeout: float | None) -> Albus:
+def signed_in_client(
+    base_url: str, timeout: float | None, organization: str | None
+) -> Albus:
     """A client on the browser session. The operations Albus accepts
     only a human bearer token for use it directly: an API key is a 401
     there, and the environment winning would be a 401 nobody asked
@@ -81,7 +93,9 @@ def signed_in_client(base_url: str, timeout: float | None) -> Albus:
             "`albus login`."
         )
 
-    return bearer_client(base_url, timeout, _current(base_url, stored))
+    return bearer_client(
+        base_url, timeout, organization, _current(base_url, stored)
+    )
 
 
 def public_client(base_url: str, timeout: float | None) -> Albus:
@@ -94,15 +108,20 @@ def public_client(base_url: str, timeout: float | None) -> Albus:
     sign-in changes."""
     global _used
     _used = None
-    return _built(base_url, timeout)
+    return _built(base_url, timeout, None)
 
 
 def bearer_client(
-    base_url: str, timeout: float | None, credential: Credential
+    base_url: str,
+    timeout: float | None,
+    organization: str | None,
+    credential: Credential,
 ) -> Albus:
     """A client on one credential, for `login` reading back the session
     it just stored rather than whatever precedence would pick."""
-    return _client(base_url, timeout, access_token=credential.access_token)
+    return _client(
+        base_url, timeout, organization, access_token=credential.access_token
+    )
 
 
 def credential(tokens: oauth.Tokens, replacing: Credential | None) -> Credential:
@@ -206,6 +225,7 @@ def _shadowing(consequence: str) -> str | None:
 def _client(
     base_url: str,
     timeout: float | None,
+    organization: str | None,
     *,
     api_key: str | None = None,
     access_token: str | None = None,
@@ -215,6 +235,7 @@ def _client(
     return _built(
         base_url,
         timeout,
+        organization,
         api_key=api_key,
         access_token=access_token,
     )
@@ -223,15 +244,19 @@ def _client(
 def _built(
     base_url: str,
     timeout: float | None,
+    organization: str | None,
     *,
     api_key: str | None = None,
     access_token: str | None = None,
 ) -> Albus:
+    headers = {ORGANIZATION_HEADER: organization} if organization else {}
     return Albus(
         api_key=api_key,
         access_token=access_token,
         server_url=base_url,
-        client=httpx.Client(follow_redirects=True, timeout=timeout),
+        client=httpx.Client(
+            follow_redirects=True, timeout=timeout, headers=headers
+        ),
     )
 
 

@@ -11,7 +11,7 @@ from albus_sdk import models
 from pydantic import ValidationError
 
 from albus_cli.client import client
-from albus_cli.context import base_url, options, sdk
+from albus_cli.context import base_url, options, organization, sdk
 from albus_cli.output import emit
 
 app = typer.Typer(no_args_is_help=True, help="Run and inspect sessions.")
@@ -215,7 +215,7 @@ def run(
     )
     timeout = options(ctx).timeout
     # A waiting invocation long-polls, so it outlives the request timeout.
-    albus = client(base_url(ctx), None if wait else timeout)
+    albus = client(base_url(ctx), None if wait else timeout, organization(ctx))
     response = albus.sessions.run_session(
         id=session_id,
         user_prompt=prompt,
@@ -268,6 +268,12 @@ def audit(
             id=session_id, after=after, limit=limit
         )
     )
+
+
+@app.command("cancel")
+def cancel(ctx: typer.Context, session_id: SessionID) -> None:
+    """Cancel the invocation running for a session."""
+    emit(sdk(ctx).sessions.cancel_session(id=session_id))
 
 
 @app.command("delete")

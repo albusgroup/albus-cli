@@ -13,6 +13,7 @@ from albus_cli import client as transport
 class Options:
     base_url: str | None
     timeout: float
+    organization: str | None
 
 
 def options(ctx: typer.Context) -> Options:
@@ -27,13 +28,19 @@ def timeout(ctx: typer.Context) -> float:
     return options(ctx).timeout
 
 
+def organization(ctx: typer.Context) -> str | None:
+    return options(ctx).organization
+
+
 def sdk(ctx: typer.Context) -> Albus:
-    return transport.client(base_url(ctx), timeout(ctx))
+    return transport.client(base_url(ctx), timeout(ctx), organization(ctx))
 
 
 def signed_in_sdk(ctx: typer.Context) -> Albus:
     """For the operations that accept only a human bearer token."""
-    return transport.signed_in_client(base_url(ctx), timeout(ctx))
+    return transport.signed_in_client(
+        base_url(ctx), timeout(ctx), organization(ctx)
+    )
 
 
 def public_sdk(ctx: typer.Context) -> Albus:

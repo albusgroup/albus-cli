@@ -10,20 +10,27 @@ import typer
 from albus_sdk import errors
 
 from albus_cli import client, credentials, docs, oauth, output
-from albus_cli.client import API_KEY_ENV, BASE_URL_ENV, NotSignedIn
+from albus_cli.client import (
+    API_KEY_ENV,
+    BASE_URL_ENV,
+    ORGANIZATION_ENV,
+    NotSignedIn,
+)
 from albus_cli.commands import (
     agents,
     auth,
+    billing,
     invites,
+    memories,
     models,
+    organization,
     secrets,
     sessions,
     status,
     tokens,
+    traces,
 )
 from albus_cli.context import Options, public_sdk
-
-BETA_CONTACT = "carlo@albus.sh"
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -41,6 +48,10 @@ app.add_typer(agents.app, name="agents")
 app.add_typer(tokens.app, name="tokens")
 app.add_typer(invites.app, name="invites")
 app.add_typer(models.app, name="models")
+app.add_typer(memories.app, name="memories")
+app.add_typer(traces.app, name="traces")
+app.add_typer(organization.app, name="organization")
+app.add_typer(billing.app, name="billing")
 app.command("login")(auth.login)
 app.command("logout")(auth.logout)
 app.command("whoami")(auth.whoami)
@@ -73,6 +84,15 @@ def configure(
         float,
         typer.Option("--timeout", help="Request timeout in seconds."),
     ] = 30.0,
+    organization: Annotated[
+        str | None,
+        typer.Option(
+            "--org",
+            envvar=ORGANIZATION_ENV,
+            help="Organization ID to act in, for a user who belongs to "
+            "several. Defaults to the one joined first.",
+        ),
+    ] = None,
     show_version: Annotated[
         bool,
         typer.Option(
@@ -83,7 +103,9 @@ def configure(
         ),
     ] = False,
 ) -> None:
-    ctx.obj = Options(base_url=base_url, timeout=timeout)
+    ctx.obj = Options(
+        base_url=base_url, timeout=timeout, organization=organization
+    )
 
 
 @app.command("health")
@@ -117,13 +139,14 @@ def main() -> None:
 
 def _reported(error: errors.AlbusError) -> str:
     """What the server refused, said in the terms the reader can act
-    on. A 403 the server codes `not_provisioned` is a valid identity the
-    beta roster does not carry, and a 401 is the credential this command
-    was built with — `client` names which one that was."""
-    if _not_provisioned(error):
+    on. A 403 the server codes `email_not_verified` is a first sign-in
+    Albus will not provision until the identity provider has verified the
+    address, and a 401 is the credential this command was built with —
+    `client` names which one that was."""
+    if _email_not_verified(error):
         return (
-            "this account is not in the Albus beta. Email "
-            f"{BETA_CONTACT} to request access."
+            "your email address is not verified. Verify it with your "
+            "identity provider, then run `albus login` again."
         )
 
     if error.status_code == HTTPStatus.UNAUTHORIZED:
@@ -154,11 +177,11 @@ def _phrase(status: int) -> str:
         return "unexpected response"
 
 
-def _not_provisioned(error: errors.AlbusError) -> bool:
+def _email_not_verified(error: errors.AlbusError) -> bool:
     if error.status_code != HTTPStatus.FORBIDDEN:
         return False
 
-    return _body(error).get("code") == "not_provisioned"
+    return _body(error).get("code") == "email_not_verified"
 
 
 def _body(error: errors.AlbusError) -> dict[str, object]:

@@ -6,6 +6,7 @@ import pytest
 from albus_sdk import errors, models
 from typer.testing import CliRunner
 
+from albus_cli import client
 from albus_cli.main import app, main
 from tests.conftest import FakeAlbus
 
@@ -192,6 +193,45 @@ def test_base_url_option_overrides_the_default_server(
 
     assert result.exit_code == 0, result.output
     assert albus.init_kwargs[0]["server_url"] == "http://localhost:8080/api"
+
+
+def sent_organization(albus: FakeAlbus) -> str | None:
+    """The organization header the built transport adds to every
+    request, or None when it sends none."""
+    transport: httpx.Client = albus.init_kwargs[0]["client"]
+    header: str | None = transport.headers.get(client.ORGANIZATION_HEADER)
+    return header
+
+
+def test_org_option_selects_the_organization_on_every_request(
+    albus: FakeAlbus,
+) -> None:
+    result = runner.invoke(app, ["--org", "o2", "sessions", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert sent_organization(albus) == "o2"
+
+
+def test_org_is_read_from_the_environment(
+    albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(client.ORGANIZATION_ENV, "o3")
+
+    result = runner.invoke(app, ["sessions", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert sent_organization(albus) == "o3"
+
+
+def test_without_an_org_the_server_picks_the_organization(
+    albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(client.ORGANIZATION_ENV, raising=False)
+
+    result = runner.invoke(app, ["sessions", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert sent_organization(albus) is None
 
 
 def test_secret_value_read_from_stdin(albus: FakeAlbus) -> None:
@@ -390,3 +430,12 @@ def test_api_error_reports_status_and_message(
 
     assert exit_info.value.code == 1
     assert "404: session not found" in capsys.readouterr().err
+
+
+def test_cancel_names_the_session(albus: FakeAlbus) -> None:
+    result = runner.invoke(app, ["sessions", "cancel", "my-session"])
+
+    assert result.exit_code == 0, result.output
+    assert albus.calls[0].name == "cancel_session"
+    assert albus.calls[0].kwargs == {"id": "my-session"}
+    assert json.loads(result.stdout)["invocation_key"] == "inv-1"

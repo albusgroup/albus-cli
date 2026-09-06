@@ -8,9 +8,10 @@ SDK operation: they talk to Auth0 rather than to Albus. See
 from typing import Annotated
 
 import typer
+from albus_sdk import models
 
 from albus_cli import client, credentials, docs, oauth, output
-from albus_cli.context import base_url, sdk, timeout
+from albus_cli.context import base_url, organization, sdk, timeout
 
 NoBrowser = Annotated[
     bool,
@@ -39,11 +40,13 @@ def login(ctx: typer.Context, no_browser: NoBrowser = False) -> None:
 
     # Read the account back through the session just stored, not through
     # precedence: naming the API key's account would be a false report.
-    signed_in = client.bearer_client(api, timeout(ctx), session)
+    signed_in = client.bearer_client(
+        api, timeout(ctx), organization(ctx), session
+    )
     # A browser session authenticates a user, so `/whoami` names one;
     # an account it did not name is not one to claim under "Signed in".
     user = signed_in.auth.whoami().user
-    output.done("Signed in" if user is None else f"Signed in as {user.email}")
+    output.done(_signed_in(user))
     output.field("API", api)
     output.field("Credential", output.abbreviated(credentials.path()))
     if session.refresh_token is None:
@@ -67,6 +70,18 @@ def logout(ctx: typer.Context) -> None:
 def whoami(ctx: typer.Context) -> None:
     """Show the caller the credential authenticates."""
     output.emit(sdk(ctx).auth.whoami())
+
+
+def _signed_in(user: models.AuthenticatedUser | None) -> str:
+    """The account and the organization its commands act in, as Albus
+    reports them for the session just stored."""
+    if user is None:
+        return "Signed in"
+
+    if user.active_organization is None:
+        return f"Signed in as {user.email}"
+
+    return f"Signed in as {user.email} in {user.active_organization.name}"
 
 
 def _next_steps() -> None:

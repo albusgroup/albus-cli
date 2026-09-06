@@ -74,11 +74,13 @@ def test_a_stored_session_is_named_with_the_account_it_belongs_to(
 
     assert report["credential"] == "session"
     assert report["authenticated"] is True
+    membership = {"id": "o1", "name": "Albus", "roles": ["admin"]}
     assert report["caller"] == {
         "user": {
             "user_id": "u1",
             "email": "carlo@albus.sh",
-            "organizations": [{"id": "o1", "name": "Albus", "roles": ["owner"]}],
+            "organizations": [membership],
+            "active_organization": membership,
         }
     }
     assert albus.calls[-1].name == "whoami"

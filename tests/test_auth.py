@@ -229,7 +229,7 @@ def test_login_stores_the_session_and_names_the_account(
     assert result.exit_code == 0, result.output
     assert announced == ["cli"]
     assert "https://albus.us.auth0.com/authorize" in result.output
-    assert "Signed in as carlo@albus.sh" in result.output
+    assert "Signed in as carlo@albus.sh in Albus" in result.output
     assert "https://albus.sh/api" in result.output
     assert str(config_dir / "credentials.json") in result.output
     saved = credentials.load(BASE_URL)
@@ -525,17 +525,14 @@ def test_whoami_prints_the_account(signed_out: FakeAlbus) -> None:
     assert signed_out.calls[0].name == "whoami"
 
 
-def test_account_outside_the_beta_is_named_as_such(
+def test_an_unverified_email_is_told_to_verify_and_sign_in_again(
     signed_out: FakeAlbus,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     stored(expires_in=3600)
     body = json.dumps(
-        {
-            "message": "this account is not part of the Albus beta",
-            "code": "not_provisioned",
-        }
+        {"message": "email not verified", "code": "email_not_verified"}
     )
 
     monkeypatch.setattr(signed_out.auth, "whoami", refuses(body))
@@ -543,8 +540,8 @@ def test_account_outside_the_beta_is_named_as_such(
     fails(monkeypatch, "whoami")
 
     reported = capsys.readouterr().err
-    assert "not in the Albus beta" in reported
-    assert "carlo@albus.sh" in reported
+    assert "email address is not verified" in reported
+    assert "albus login" in reported
 
 
 def test_other_forbidden_responses_report_what_the_server_said(
