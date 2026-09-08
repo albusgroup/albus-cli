@@ -8,6 +8,7 @@ wrong credential sends an agent somewhere there is nothing to fix."""
 import os
 import time
 from dataclasses import dataclass
+from importlib.metadata import version
 
 import httpx
 from albus_sdk import Albus
@@ -23,6 +24,10 @@ ORGANIZATION_ENV = "ALBUS_ORG"
 # Selects among the signed-in user's organizations. An API key is bound to
 # one already, and the server ignores the header for it.
 ORGANIZATION_HEADER = "X-Albus-Organization"
+
+# Every request names the CLI first, before the SDK's own product token,
+# so server logs can tell a command from a script on the same SDK.
+USER_AGENT = f"albus-cli/{version('albus-cli')}"
 
 # Renew slightly early: an access token that outlives the request it is
 # sent on is not worth the 401.
@@ -288,13 +293,18 @@ def _built(
     credential: str | None = None,
 ) -> Albus:
     headers = {ORGANIZATION_HEADER: organization} if organization else {}
-    return Albus(
+    api = Albus(
         api_key=credential,
         server_url=base_url,
         client=httpx.Client(
             follow_redirects=True, timeout=timeout, headers=headers
         ),
     )
+    # The SDK sets User-Agent on each request itself, overriding the
+    # transport's headers, so the identification goes on its configuration.
+    configuration = api.sdk_configuration
+    configuration.user_agent = f"{USER_AGENT} {configuration.user_agent}"
+    return api
 
 
 def _current(base_url: str, stored: Credential) -> Credential:

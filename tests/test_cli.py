@@ -196,6 +196,27 @@ def test_base_url_option_overrides_the_default_server(
     assert albus.init_kwargs[0]["server_url"] == "http://localhost:8080/api"
 
 
+def test_every_request_names_the_cli_in_its_user_agent() -> None:
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(200, json={"status": "ok"})
+
+    api = client.public_client("http://albus.test/api", timeout=None)
+    api.sdk_configuration.client = httpx.Client(
+        transport=httpx.MockTransport(answer)
+    )
+
+    api.health.health()
+
+    assert (
+        sent[0]
+        .headers["User-Agent"]
+        .startswith(f"{client.USER_AGENT} speakeasy-sdk/python")
+    )
+
+
 def sent_organization(albus: FakeAlbus) -> str | None:
     """The organization header the built transport adds to every
     request, or None when it sends none."""

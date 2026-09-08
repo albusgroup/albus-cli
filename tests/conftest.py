@@ -322,6 +322,11 @@ class FakeBilling:
 
 
 @dataclass
+class FakeConfiguration:
+    user_agent: str = "speakeasy-sdk/python"
+
+
+@dataclass
 class FakeAlbus:
     init_kwargs: list[dict[str, Any]] = field(default_factory=list)
     calls: list[Call] = field(default_factory=list)
@@ -338,6 +343,7 @@ class FakeAlbus:
         self.traces = FakeTraces(self.calls)
         self.organization = FakeOrganization(self.calls)
         self.billing = FakeBilling(self.calls)
+        self.sdk_configuration = FakeConfiguration()
 
     def __call__(self, **kwargs: Any) -> "FakeAlbus":
         self.init_kwargs.append(kwargs)
