@@ -76,8 +76,7 @@ def test_the_session_is_used_over_an_api_key(
     result = runner.invoke(app, ["invites", "create", "new@example.com"])
 
     assert result.exit_code == 0, result.output
-    assert signed_in.init_kwargs[0]["access_token"] == "stored-access"
-    assert signed_in.init_kwargs[0]["api_key"] is None
+    assert signed_in.init_kwargs[0]["api_key"] == "stored-access"
 
 
 def test_list(signed_in: FakeAlbus) -> None:
@@ -86,7 +85,7 @@ def test_list(signed_in: FakeAlbus) -> None:
     assert result.exit_code == 0, result.output
     assert signed_in.calls[0].name == "list_invites"
     assert json.loads(result.stdout)["invites"][0]["id"] == "i1"
-    assert signed_in.init_kwargs[0]["api_key"] is None
+    assert signed_in.init_kwargs[0]["api_key"] == "stored-access"
 
 
 def test_revoke_prints_nothing(signed_in: FakeAlbus) -> None:

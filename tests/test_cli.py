@@ -6,7 +6,8 @@ import pytest
 from albus_sdk import errors, models
 from typer.testing import CliRunner
 
-from albus_cli import client
+from albus_cli import client, credentials
+from albus_cli.credentials import Credential
 from albus_cli.main import app, main
 from tests.conftest import FakeAlbus
 
@@ -232,6 +233,30 @@ def test_without_an_org_the_server_picks_the_organization(
 
     assert result.exit_code == 0, result.output
     assert sent_organization(albus) is None
+
+
+def test_saved_org_selects_the_organization_for_a_browser_session(
+    albus: FakeAlbus, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv(credentials.CONFIG_DIR_ENV, str(tmp_path / "config"))
+    monkeypatch.delenv(credentials.XDG_CONFIG_HOME_ENV, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv(client.API_KEY_ENV, raising=False)
+    credentials.save(
+        "https://api.albus.sh",
+        Credential("access", "refresh", 1_800_000_000),
+    )
+    stored = credentials.session("https://api.albus.sh")
+    assert stored is not None
+    credentials.set_organization("https://api.albus.sh", "o2", stored)
+
+    result = runner.invoke(
+        app,
+        ["--base-url", "https://api.albus.sh", "sessions", "list"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert sent_organization(albus) == "o2"
 
 
 def test_secret_value_read_from_stdin(albus: FakeAlbus) -> None:

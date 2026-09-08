@@ -31,6 +31,13 @@ def credential(access_token: str = "access") -> Credential:
     )
 
 
+def stored() -> credentials.Session:
+    """The session as a command reads it before acting on it."""
+    session = credentials.session(BASE_URL)
+    assert session is not None
+    return session
+
+
 def test_saved_credential_round_trips() -> None:
     credentials.save(BASE_URL, credential())
 
@@ -101,7 +108,9 @@ def test_a_trailing_slash_is_the_same_entry() -> None:
     credentials.save(f"{BASE_URL}/", credential())
 
     assert credentials.load(BASE_URL) == credential()
-    assert entries() == {BASE_URL: entry("access")}
+    assert entries() == {
+        BASE_URL: {**entry("access"), "session_id": stored().identity}
+    }
 
 
 def test_two_base_urls_do_not_collide() -> None:
@@ -124,6 +133,114 @@ def test_delete_keeps_the_other_entries() -> None:
 
     assert credentials.load(BASE_URL) is None
     assert credentials.load(other) is not None
+
+
+def test_saved_organization_round_trips_with_a_credential() -> None:
+    credentials.save(BASE_URL, credential())
+
+    credentials.set_organization(BASE_URL, "42", stored())
+
+    assert credentials.organization(BASE_URL) == "42"
+    assert credentials.load(BASE_URL) == credential()
+
+
+def test_saving_a_fresh_login_clears_the_saved_organization() -> None:
+    credentials.save(BASE_URL, credential())
+    credentials.set_organization(BASE_URL, "42", stored())
+
+    credentials.save(BASE_URL, credential("new-login"))
+
+    assert credentials.organization(BASE_URL) is None
+
+
+def test_session_reads_credential_and_organization_together() -> None:
+    credentials.save(BASE_URL, credential())
+    credentials.set_organization(BASE_URL, "42", stored())
+
+    assert credentials.session(BASE_URL) == credentials.Session(
+        credential(), "42", stored().identity
+    )
+
+
+def test_legacy_session_can_select_an_organization(tmp_path: Path) -> None:
+    legacy = tmp_path / "home/.albus/credentials.json"
+    other = "https://other.example/api"
+    write_document(
+        legacy,
+        {
+            "version": 1,
+            "credentials": {BASE_URL: entry("legacy"), other: entry("kept")},
+        },
+    )
+
+    credentials.set_organization(BASE_URL, "42", stored())
+
+    assert credentials.organization(BASE_URL) == "42"
+    assert credentials.load(BASE_URL) == credential("legacy")
+    assert credentials.load(other) == credential("kept")
+    assert json.loads(legacy.read_text())["credentials"][BASE_URL] == entry(
+        "legacy"
+    )
+
+
+def test_set_organization_refuses_a_session_it_did_not_validate() -> None:
+    """The entry a concurrent `login` wrote is another account's; a
+    `logout` leaves none. Neither takes the organization."""
+    credentials.save(BASE_URL, credential())
+    validated = stored()
+
+    credentials.save(BASE_URL, credential())
+
+    with pytest.raises(credentials.SessionReplaced):
+        credentials.set_organization(BASE_URL, "42", validated)
+
+    credentials.delete(BASE_URL)
+
+    with pytest.raises(credentials.SessionReplaced):
+        credentials.set_organization(BASE_URL, "42", validated)
+
+    assert credentials.organization(BASE_URL) is None
+
+
+def test_set_organization_accepts_a_session_renewed_meanwhile() -> None:
+    """Renewal rotates every token but is the same sign-in, and must
+    not read as a replacement."""
+    credentials.save(BASE_URL, credential())
+    validated = stored()
+
+    credentials.renew(BASE_URL, lambda current: credential("renewed"))
+    credentials.set_organization(BASE_URL, "42", validated)
+
+    assert credentials.session(BASE_URL) == credentials.Session(
+        credential("renewed"), "42", validated.identity
+    )
+
+
+def test_login_over_an_unnamed_session_is_a_replacement(
+    tmp_path: Path,
+) -> None:
+    """An entry from before sign-ins were named has no identity; the
+    login that replaces it has one, so it is told apart all the same."""
+    write_document(
+        tmp_path / "home/.albus/credentials.json",
+        {"version": 1, "credentials": {BASE_URL: entry("legacy")}},
+    )
+    validated = stored()
+    assert validated.identity is None
+
+    credentials.save(BASE_URL, credential())
+
+    with pytest.raises(credentials.SessionReplaced):
+        credentials.set_organization(BASE_URL, "42", validated)
+
+
+def test_refresh_keeps_the_saved_organization() -> None:
+    credentials.save(BASE_URL, credential())
+    credentials.set_organization(BASE_URL, "42", stored())
+
+    credentials.renew(BASE_URL, lambda current: credential("renewed"))
+
+    assert credentials.organization(BASE_URL) == "42"
 
 
 def test_delete_without_a_file_writes_nothing() -> None:

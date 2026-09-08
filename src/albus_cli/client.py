@@ -45,6 +45,17 @@ class _Used:
 _used: _Used | None = None
 
 
+@dataclass(frozen=True)
+class Selection:
+    """A client on the browser session and the session it was read
+    from, for `organization use` and `default`: what they save
+    afterwards must be keyed to the sign-in they validated, not
+    whichever one is stored by then."""
+
+    api: Albus
+    session: credentials.Session
+
+
 def base_url(configured: str | None) -> str:
     """The API a command talks to, spelled as the credential store keys
     it. The SDK picks its first server when none is configured."""
@@ -67,15 +78,13 @@ def client(
     if key:
         # The environment wins over a stored session deliberately, so CI
         # and agent harnesses inject a credential without touching disk.
-        return _client(base_url, timeout, organization, api_key=key)
+        return _client(base_url, timeout, organization, key, api_key=True)
 
-    stored = credentials.load(base_url)
+    stored = credentials.session(base_url)
     if stored is None:
         raise _signed_out(base_url)
 
-    return bearer_client(
-        base_url, timeout, organization, _current(base_url, stored)
-    )
+    return _session_client(base_url, timeout, organization, stored)
 
 
 def signed_in_client(
@@ -85,16 +94,21 @@ def signed_in_client(
     only a human bearer token for use it directly: an API key is a 401
     there, and the environment winning would be a 401 nobody asked
     for."""
-    stored = credentials.load(base_url)
-    if stored is None:
-        raise NotSignedIn(
-            f"not signed in to {base_url}. This command needs a browser "
-            f"session, which {API_KEY_ENV} cannot stand in for: run "
-            "`albus login`."
-        )
+    stored = _signed_in(base_url)
+    return _session_client(base_url, timeout, organization, stored)
 
-    return bearer_client(
-        base_url, timeout, organization, _current(base_url, stored)
+
+def selection(
+    base_url: str, timeout: float | None, organization: str | None
+) -> Selection:
+    """A client on the browser session acting in exactly `organization`
+    — none meaning the server's default, not the saved one. The
+    organization commands read `/whoami` through it before they write,
+    so a request that fails leaves the selection as it was."""
+    stored = _signed_in(base_url)
+    current = _current(base_url, stored.credential)
+    return Selection(
+        bearer_client(base_url, timeout, organization, current), stored
     )
 
 
@@ -120,7 +134,7 @@ def bearer_client(
     """A client on one credential, for `login` reading back the session
     it just stored rather than whatever precedence would pick."""
     return _client(
-        base_url, timeout, organization, access_token=credential.access_token
+        base_url, timeout, organization, credential.access_token, api_key=False
     )
 
 
@@ -197,6 +211,34 @@ def shadows_logout() -> str | None:
     return _shadowing("commands stay authenticated until it is unset.")
 
 
+def _signed_in(base_url: str) -> credentials.Session:
+    stored = credentials.session(base_url)
+    if stored is None:
+        raise NotSignedIn(
+            f"not signed in to {base_url}. This command needs a browser "
+            f"session, which {API_KEY_ENV} cannot stand in for: run "
+            "`albus login`."
+        )
+
+    return stored
+
+
+def _session_client(
+    base_url: str,
+    timeout: float | None,
+    organization: str | None,
+    stored: credentials.Session,
+) -> Albus:
+    """A client on a stored session, acting in the organization named on
+    the command line, else the one saved with the session."""
+    return bearer_client(
+        base_url,
+        timeout,
+        organization or stored.organization,
+        _current(base_url, stored.credential),
+    )
+
+
 def _signed_out(base_url: str) -> NotSignedIn:
     """Nothing stored to authenticate with, whether this command found
     no entry or a concurrent `logout` removed it."""
@@ -226,33 +268,28 @@ def _client(
     base_url: str,
     timeout: float | None,
     organization: str | None,
+    credential: str,
     *,
-    api_key: str | None = None,
-    access_token: str | None = None,
+    api_key: bool,
 ) -> Albus:
+    """A client sending `credential`, which is an API key or a session's
+    access token: both are a bearer token on the wire, and the SDK takes
+    either as its one `api_key`. Which it was is what `rejected` needs
+    to know."""
     global _used
-    _used = _Used(base_url=base_url, api_key=api_key is not None)
-    return _built(
-        base_url,
-        timeout,
-        organization,
-        api_key=api_key,
-        access_token=access_token,
-    )
+    _used = _Used(base_url=base_url, api_key=api_key)
+    return _built(base_url, timeout, organization, credential)
 
 
 def _built(
     base_url: str,
     timeout: float | None,
     organization: str | None,
-    *,
-    api_key: str | None = None,
-    access_token: str | None = None,
+    credential: str | None = None,
 ) -> Albus:
     headers = {ORGANIZATION_HEADER: organization} if organization else {}
     return Albus(
-        api_key=api_key,
-        access_token=access_token,
+        api_key=credential,
         server_url=base_url,
         client=httpx.Client(
             follow_redirects=True, timeout=timeout, headers=headers

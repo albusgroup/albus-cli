@@ -5,7 +5,8 @@ from typing import Annotated, Literal
 
 import typer
 
-from albus_cli.context import sdk
+from albus_cli import client, credentials
+from albus_cli.context import base_url, sdk, timeout
 from albus_cli.output import emit
 
 app = typer.Typer(
@@ -23,6 +24,36 @@ UserID = Annotated[
 def get(ctx: typer.Context) -> None:
     """Get the organization."""
     emit(sdk(ctx).organization.get_organization())
+
+
+@app.command("use")
+def use(
+    ctx: typer.Context,
+    organization_id: Annotated[
+        str, typer.Argument(metavar="ORGANIZATION_ID", help="Organization ID.")
+    ],
+) -> None:
+    """Persist the organization the browser session acts in."""
+    if not organization_id:
+        raise typer.BadParameter("ORGANIZATION_ID must not be empty.")
+
+    _select(ctx, organization_id)
+
+
+@app.command("default")
+def default(ctx: typer.Context) -> None:
+    """Use the earliest-joined organization by default."""
+    _select(ctx, None)
+
+
+def _select(ctx: typer.Context, organization_id: str | None) -> None:
+    """Prove the membership with `/whoami`, then save it against the
+    session that proved it."""
+    api = base_url(ctx)
+    selected = client.selection(api, timeout(ctx), organization_id)
+    caller = selected.api.auth.whoami()
+    credentials.set_organization(api, organization_id, selected.session)
+    emit(caller)
 
 
 @app.command("rename")

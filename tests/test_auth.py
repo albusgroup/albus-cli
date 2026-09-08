@@ -75,7 +75,6 @@ def test_api_key_wins_over_a_stored_session(
 
     assert result.exit_code == 0, result.output
     assert albus.init_kwargs[0]["api_key"] == "env-key"
-    assert albus.init_kwargs[0]["access_token"] is None
 
 
 def test_stored_session_authenticates_with_a_bearer_token(
@@ -86,8 +85,7 @@ def test_stored_session_authenticates_with_a_bearer_token(
     result = runner.invoke(app, ["sessions", "list"])
 
     assert result.exit_code == 0, result.output
-    assert signed_out.init_kwargs[0]["access_token"] == "stored-access"
-    assert signed_out.init_kwargs[0]["api_key"] is None
+    assert signed_out.init_kwargs[0]["api_key"] == "stored-access"
 
 
 def test_expired_session_is_refreshed_and_stored(
@@ -111,7 +109,7 @@ def test_expired_session_is_refreshed_and_stored(
 
     assert result.exit_code == 0, result.output
     assert grants == ["refresh"]
-    assert signed_out.init_kwargs[0]["access_token"] == "renewed-access"
+    assert signed_out.init_kwargs[0]["api_key"] == "renewed-access"
     saved = credentials.load(BASE_URL)
     assert saved is not None
     assert saved.access_token == "renewed-access"
@@ -157,7 +155,7 @@ def test_a_session_expiring_within_the_leeway_is_refreshed(
     )
 
     assert runner.invoke(app, ["sessions", "list"]).exit_code == 0
-    assert signed_out.init_kwargs[0]["access_token"] == "renewed-access"
+    assert signed_out.init_kwargs[0]["api_key"] == "renewed-access"
 
 
 def test_rejected_refresh_reports_an_expired_session(
@@ -206,7 +204,7 @@ def test_no_credential_names_both_ways_to_get_one(
     assert "ALBUS_API_KEY" in reported
 
 
-def test_login_stores_the_session_and_names_the_account(
+def test_login_stores_the_session_and_prints_whoami(
     signed_out: FakeAlbus, monkeypatch: pytest.MonkeyPatch, config_dir: Path
 ) -> None:
     announced: list[str] = []
@@ -230,6 +228,8 @@ def test_login_stores_the_session_and_names_the_account(
     assert announced == ["cli"]
     assert "https://albus.us.auth0.com/authorize" in result.output
     assert "Signed in as carlo@albus.sh in Albus" in result.output
+    assert '"active_organization"' in result.output
+    assert '"organizations"' in result.output
     assert "https://albus.sh/api" in result.output
     assert str(config_dir / "credentials.json") in result.output
     saved = credentials.load(BASE_URL)
@@ -239,7 +239,7 @@ def test_login_stores_the_session_and_names_the_account(
     # The account is resolved over the API with the new credential,
     # never by reading the token.
     assert signed_out.calls[-1].name == "whoami"
-    assert signed_out.init_kwargs[-1]["access_token"] == "fresh-access"
+    assert signed_out.init_kwargs[-1]["api_key"] == "fresh-access"
 
 
 def signs_in(
@@ -270,7 +270,7 @@ def test_login_names_the_account_it_just_signed_in_as(
 
     assert result.exit_code == 0, result.output
     assert "as carlo@albus.sh" in result.output
-    assert albus.init_kwargs[-1]["access_token"] == "fresh-access"
+    assert albus.init_kwargs[-1]["api_key"] == "fresh-access"
 
 
 def test_login_says_an_api_key_shadows_the_new_session(
@@ -441,7 +441,6 @@ def test_whoami_names_the_caller_the_next_command_sends(
 
     assert runner.invoke(app, ["whoami"]).exit_code == 0
     assert albus.init_kwargs[0]["api_key"] == "env-key"
-    assert albus.init_kwargs[0]["access_token"] is None
 
 
 def test_whoami_works_with_only_an_api_key(

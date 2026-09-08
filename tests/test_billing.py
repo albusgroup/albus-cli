@@ -72,8 +72,7 @@ def test_checkout_uses_the_session_over_an_api_key(
         "success_url": "https://example.com/ok",
         "cancel_url": "https://example.com/back",
     }
-    assert albus.init_kwargs[0]["access_token"] == "stored-access"
-    assert albus.init_kwargs[0]["api_key"] is None
+    assert albus.init_kwargs[0]["api_key"] == "stored-access"
     assert json.loads(result.stdout)["url"].startswith("https://")
 
 

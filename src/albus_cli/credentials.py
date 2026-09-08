@@ -9,6 +9,7 @@ and a half-written file would look like a broken login.
 import fcntl
 import json
 import os
+import secrets
 import tempfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -22,6 +23,10 @@ FILE_NAME = "credentials.json"
 VERSION = 1
 FILE_MODE = 0o600
 DIRECTORY_MODE = 0o700
+ORGANIZATION_ID = "organization_id"
+# Names one sign-in. Renewal rotates the tokens but keeps this, so it
+# is what tells a refreshed session from a replaced one.
+SESSION_ID = "session_id"
 
 
 class CorruptFile(Exception):
@@ -29,6 +34,17 @@ class CorruptFile(Exception):
 
     def __init__(self, file: Path, reason: str) -> None:
         super().__init__(f"{file} is not a credentials file: {reason}")
+
+
+class SessionReplaced(Exception):
+    """The stored session changed under a command that had validated it:
+    a concurrent `login` or `logout` for the same API."""
+
+    def __init__(self, base_url: str) -> None:
+        super().__init__(
+            f"the session for {base_url} changed while this command ran. "
+            "Run it again."
+        )
 
 
 @dataclass(frozen=True)
@@ -40,34 +56,100 @@ class Credential:
     expires_at: float
 
 
+@dataclass(frozen=True)
+class Session:
+    """A stored browser session: the credential and the organization it
+    acts in, read from one version of the entry. Read separately, a
+    concurrent sign-in could pair one account's token with another's
+    organization."""
+
+    credential: Credential
+    organization: str | None
+    # None for an entry written before sign-ins were named.
+    identity: str | None
+
+
 def path() -> Path:
     """The credentials file the CLI reads first and always writes."""
     return _directory() / FILE_NAME
 
 
 def load(base_url: str) -> Credential | None:
-    """The stored credential for base_url, or None if there is none.
+    """The stored credential for base_url, or None if there is none."""
+    stored = session(base_url)
+    return stored.credential if stored else None
+
+
+def session(base_url: str) -> Session | None:
+    """The stored session for base_url, or None if there is none.
 
     A file or entry this version cannot read counts as "none": the
     caller then tells the user to sign in, which is the fix either way.
     Readers take no lock because every write lands by rename.
     """
-    primary = path()
-    file = primary if primary.exists() else _legacy_path()
     try:
-        entries = _entries(file)
+        entry = _stored_entries().get(_key(base_url))
     except (OSError, CorruptFile):
         return None
 
-    return _credential(entries.get(_key(base_url)))
+    credential = _credential(entry)
+    if credential is None:
+        return None
+
+    return Session(credential, _selected_organization(entry), _identity(entry))
 
 
 def save(base_url: str, credential: Credential) -> None:
-    _replace_entry(base_url, asdict(credential))
+    """Store a fresh sign-in, under a name no earlier sign-in had."""
+    _replace_entry(
+        base_url, {**asdict(credential), SESSION_ID: secrets.token_hex(16)}
+    )
 
 
 def delete(base_url: str) -> None:
     _replace_entry(base_url, None)
+
+
+def organization(base_url: str) -> str | None:
+    """The browser session's saved organization, if it still has one."""
+    stored = session(base_url)
+    return stored.organization if stored else None
+
+
+def set_organization(
+    base_url: str, organization_id: str | None, validated: Session
+) -> None:
+    """Remember or clear the selected organization for one browser session.
+
+    `validated` is the session the caller proved the membership with; the
+    write goes through only while the entry is still that sign-in, so
+    one that landed in between does not inherit another account's
+    organization. A renewal in between is the same sign-in and does not
+    stand in the way. A session still living in the legacy file is carried
+    into the primary one with its neighbours, since that is the only
+    file this version writes.
+    """
+    target = path()
+    directory = target.parent
+    directory.mkdir(parents=True, exist_ok=True, mode=DIRECTORY_MODE)
+    directory.chmod(DIRECTORY_MODE)
+
+    with _lock(directory):
+        entries = _stored_entries()
+        fields = _mapping(entries.get(_key(base_url)))
+        if fields is None or _credential(fields) is None:
+            raise SessionReplaced(base_url)
+
+        if _identity(fields) != validated.identity:
+            raise SessionReplaced(base_url)
+
+        if organization_id is None:
+            fields.pop(ORGANIZATION_ID, None)
+        else:
+            fields[ORGANIZATION_ID] = organization_id
+
+        entries[_key(base_url)] = fields
+        _write(target, {"version": VERSION, "credentials": entries})
 
 
 def renew(
@@ -102,7 +184,16 @@ def renew(
         if minted == current:
             return current
 
-        entries[_key(base_url)] = asdict(minted)
+        entry = asdict(minted)
+        stored = entries.get(_key(base_url))
+        for name, kept in (
+            (ORGANIZATION_ID, _selected_organization(stored)),
+            (SESSION_ID, _identity(stored)),
+        ):
+            if kept is not None:
+                entry[name] = kept
+
+        entries[_key(base_url)] = entry
         _write(target, {"version": VERSION, "credentials": entries})
         return minted
 
@@ -122,6 +213,13 @@ def _directory() -> Path:
 def _legacy_path() -> Path:
     """Read-only fallback for the pre-XDG location."""
     return Path.home() / ".albus" / FILE_NAME
+
+
+def _stored_entries() -> dict[str, object]:
+    """The entries of the file a reader sees: the primary one, or the
+    legacy one while the primary has never been written."""
+    primary = path()
+    return _entries(primary if primary.exists() else _legacy_path())
 
 
 def _key(base_url: str) -> str:
@@ -236,6 +334,23 @@ def _credential(entry: object) -> Credential | None:
         return None
 
     return Credential(access_token, refresh_token, float(expires_at))
+
+
+def _selected_organization(entry: object) -> str | None:
+    return _text(entry, ORGANIZATION_ID)
+
+
+def _identity(entry: object) -> str | None:
+    return _text(entry, SESSION_ID)
+
+
+def _text(entry: object, name: str) -> str | None:
+    fields = _mapping(entry)
+    if fields is None:
+        return None
+
+    value = fields.get(name)
+    return value if isinstance(value, str) else None
 
 
 def _mapping(value: object) -> dict[str, object] | None:

@@ -45,8 +45,8 @@ def login(ctx: typer.Context, no_browser: NoBrowser = False) -> None:
     )
     # A browser session authenticates a user, so `/whoami` names one;
     # an account it did not name is not one to claim under "Signed in".
-    user = signed_in.auth.whoami().user
-    output.done(_signed_in(user))
+    caller = signed_in.auth.whoami()
+    output.done(_signed_in(caller.user))
     output.field("API", api)
     output.field("Credential", output.abbreviated(credentials.path()))
     if session.refresh_token is None:
@@ -54,6 +54,8 @@ def login(ctx: typer.Context, no_browser: NoBrowser = False) -> None:
             "Auth0 issued no refresh token, so this session ends when the "
             "access token expires: enable Allow Offline Access on the API."
         )
+
+    output.emit(caller)
 
     _also(client.shadows_session())
     _next_steps()

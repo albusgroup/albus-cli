@@ -25,7 +25,6 @@ def test_health_needs_no_credential(
 
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout) == {"status": "ok"}
-    assert albus.init_kwargs[0]["access_token"] is None
     assert albus.init_kwargs[0]["api_key"] is None
 
 

@@ -119,7 +119,11 @@ def health(ctx: typer.Context) -> None:
 def main() -> None:
     try:
         app()
-    except (NotSignedIn, oauth.LoginError) as unauthenticated:
+    except (
+        NotSignedIn,
+        oauth.LoginError,
+        credentials.SessionReplaced,
+    ) as unauthenticated:
         fail(str(unauthenticated))
     except credentials.CorruptFile as corrupt:
         fail(f"{corrupt}. Delete or repair it, then run `albus login`.")
