@@ -65,7 +65,7 @@ _DEV = TenantConfig(
     audience="https://api.albus.dev",
 )
 _PRODUCTION = TenantConfig(
-    domain="albusgroup.us.auth0.com",
+    domain="login.albus.sh",
     client_id="AKj5qYBdhejMt3ztROUJDBtHThmXmQL1",
     audience="https://api.albus.sh",
 )
@@ -130,6 +130,7 @@ def authorize(
                 "redirect_uri": redirect_uri,
                 "scope": SCOPE,
                 "audience": tenant.audience,
+                "connection": "google-oauth2",
                 "code_challenge": _code_challenge(verifier),
                 "code_challenge_method": "S256",
                 "state": state,

@@ -102,6 +102,7 @@ def test_authorize_exchanges_the_redirected_code_for_tokens(
     assert authorization["client_id"] == "client-1"
     assert authorization["audience"] == TENANT.audience
     assert authorization["scope"] == oauth.SCOPE
+    assert authorization["connection"] == "google-oauth2"
     assert authorization["code_challenge_method"] == "S256"
     assert authorization["redirect_uri"].startswith("http://127.0.0.1:")
     assert authorization["redirect_uri"].endswith("/callback")
@@ -338,7 +339,7 @@ def test_tenant_config_signs_the_default_api_in_to_the_production_tenant(
     tenant = oauth.tenant_config("https://albus.sh/api")
 
     assert tenant == oauth.TenantConfig(
-        domain="albusgroup.us.auth0.com",
+        domain="login.albus.sh",
         client_id="AKj5qYBdhejMt3ztROUJDBtHThmXmQL1",
         audience="https://api.albus.sh",
     )
