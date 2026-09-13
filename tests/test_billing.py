@@ -16,7 +16,7 @@ from tests.conftest import FakeAlbus
 
 runner = CliRunner()
 
-BASE_URL = "https://albus.sh/api"
+BASE_URL = "https://albus.sh/api/v1"
 
 
 def test_balance(albus: FakeAlbus) -> None:

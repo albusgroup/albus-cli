@@ -20,7 +20,7 @@ from tests.conftest import FakeAlbus
 
 runner = CliRunner()
 
-BASE_URL = "https://albus.sh/api"
+BASE_URL = "https://albus.sh/api/v1"
 LOCAL_URL = "http://localhost:8080/api"
 TENANT = oauth.TenantConfig(
     domain="albus.us.auth0.com", client_id="cli", audience="https://api"
@@ -173,7 +173,7 @@ def test_rejected_refresh_reports_an_expired_session(
     fails(monkeypatch, "sessions", "list")
 
     reported = capsys.readouterr().err
-    assert "your session for https://albus.sh/api expired" in reported
+    assert "your session for https://albus.sh/api/v1 expired" in reported
     assert "invalid_grant" in reported
     assert "albus login" in reported
 
@@ -199,7 +199,7 @@ def test_no_credential_names_both_ways_to_get_one(
     fails(monkeypatch, "sessions", "list")
 
     reported = capsys.readouterr().err
-    assert "not signed in to https://albus.sh/api" in reported
+    assert "not signed in to https://albus.sh/api/v1" in reported
     assert "albus login" in reported
     assert "ALBUS_API_KEY" in reported
 
@@ -230,7 +230,7 @@ def test_login_stores_the_session_and_prints_whoami(
     assert "Signed in as carlo@albus.sh in Albus" in result.output
     assert '"active_organization"' in result.output
     assert '"organizations"' in result.output
-    assert "https://albus.sh/api" in result.output
+    assert "https://albus.sh/api/v1" in result.output
     assert str(config_dir / "credentials.json") in result.output
     saved = credentials.load(BASE_URL)
     assert saved is not None
@@ -366,7 +366,7 @@ def test_a_rejected_api_key_is_not_told_to_sign_in(
 
     reported = capsys.readouterr().err
     assert "the API key in ALBUS_API_KEY was rejected" in reported
-    assert "https://albus.sh/api" in reported
+    assert "https://albus.sh/api/v1" in reported
     assert "albus login" not in reported.split("unset ALBUS_API_KEY")[0]
 
 
@@ -380,7 +380,7 @@ def test_a_rejected_session_says_to_sign_in_again(
     fails(monkeypatch, "sessions", "list")
 
     reported = capsys.readouterr().err
-    assert "your session for https://albus.sh/api was rejected" in reported
+    assert "your session for https://albus.sh/api/v1 was rejected" in reported
     assert "albus login" in reported
     assert "401" not in reported
 
@@ -500,7 +500,7 @@ def test_logout_forgets_the_session(signed_out: FakeAlbus) -> None:
     result = runner.invoke(app, ["logout"])
 
     assert result.exit_code == 0, result.output
-    assert "Signed out of https://albus.sh/api" in result.output
+    assert "Signed out of https://albus.sh/api/v1" in result.output
     assert credentials.load(BASE_URL) is None
 
 

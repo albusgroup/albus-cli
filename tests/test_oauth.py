@@ -308,7 +308,8 @@ def test_refresh_reports_a_revoked_refresh_token(auth0: Auth0) -> None:
 @pytest.mark.parametrize(
     "api",
     [
-        "http://localhost:8080/api/",
+        "http://localhost:8080/api/v1/",
+        "http://localhost:8080/api/v1",
         "http://localhost:8080/api",
         "http://localhost:8080",
     ],
@@ -330,13 +331,16 @@ def test_tenant_config_signs_the_local_api_in_to_the_dev_tenant(
     )
 
 
+@pytest.mark.parametrize(
+    "api", ["https://albus.sh/api/v1", "https://albus.sh/api"]
+)
 def test_tenant_config_signs_the_default_api_in_to_the_production_tenant(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, api: str
 ) -> None:
     for env in (oauth.DOMAIN_ENV, oauth.CLIENT_ID_ENV, oauth.AUDIENCE_ENV):
         monkeypatch.delenv(env, raising=False)
 
-    tenant = oauth.tenant_config("https://albus.sh/api")
+    tenant = oauth.tenant_config(api)
 
     assert tenant == oauth.TenantConfig(
         domain="login.albus.sh",

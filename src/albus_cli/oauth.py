@@ -71,8 +71,10 @@ _PRODUCTION = TenantConfig(
 )
 _UNCONFIGURED = TenantConfig(domain="", client_id="", audience="")
 _TENANTS = {
+    "http://localhost:8080/api/v1": _DEV,
     "http://localhost:8080/api": _DEV,
     "http://localhost:8080": _DEV,
+    "https://albus.sh/api/v1": _PRODUCTION,
     "https://albus.sh/api": _PRODUCTION,
 }
 

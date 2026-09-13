@@ -17,7 +17,7 @@ from tests.conftest import FakeAlbus
 
 runner = CliRunner()
 
-BASE_URL = "https://albus.sh/api"
+BASE_URL = "https://albus.sh/api/v1"
 
 
 @pytest.fixture(autouse=True)

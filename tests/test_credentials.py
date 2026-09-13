@@ -10,7 +10,7 @@ import pytest
 from albus_cli import credentials
 from albus_cli.credentials import Credential
 
-BASE_URL = "https://albus.sh/api"
+BASE_URL = "https://albus.sh/api/v1"
 
 
 @pytest.fixture(autouse=True)

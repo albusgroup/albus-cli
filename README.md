@@ -59,7 +59,7 @@ agent harnesses need not touch disk:
 
 ```bash
 export ALBUS_API_KEY=...     # organization API key
-export ALBUS_BASE_URL=http://localhost:8080/api  # optional; defaults to prod
+export ALBUS_BASE_URL=http://localhost:8080/api/v1  # optional; defaults to prod
 ```
 
 `--base-url` overrides `ALBUS_BASE_URL`, and `--timeout` bounds each request

@@ -15,7 +15,7 @@ from tests.test_cli import sent_organization
 
 runner = CliRunner()
 
-BASE_URL = "https://albus.sh/api"
+BASE_URL = "https://albus.sh/api/v1"
 SESSION = Credential("access", "refresh", 1_800_000_000)
 
 
