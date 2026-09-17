@@ -314,6 +314,33 @@ class FakeBilling:
             ]
         )
 
+    def get_spend(self, **kwargs: Any) -> models.SpendResponse:
+        self.calls.append(Call("get_spend", kwargs))
+        day = datetime(2026, 1, 1, tzinfo=UTC)
+        return models.SpendResponse(
+            since=day,
+            until=datetime(2026, 1, 2, tzinfo=UTC),
+            total_usd="3.75",
+            lines=[
+                models.SpendLine(
+                    day=day,
+                    kind="model",
+                    provider_name="anthropic",
+                    model_name="claude-sonnet-4",
+                    usd="3.50",
+                    input_tokens=1000,
+                    output_tokens=200,
+                ),
+                models.SpendLine(
+                    day=day,
+                    kind="hardware",
+                    sku="invocation_second",
+                    usd="0.25",
+                    wall_ms=12000,
+                ),
+            ],
+        )
+
     def create_checkout(self, **kwargs: Any) -> models.CreateCheckoutResponse:
         self.calls.append(Call("create_checkout", kwargs))
         return models.CreateCheckoutResponse(

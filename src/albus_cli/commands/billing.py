@@ -5,10 +5,12 @@
 balance and the ledger accepts either credential.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 import typer
 
+from albus_cli.commands.traces import parse_time
 from albus_cli.context import sdk, signed_in_sdk
 from albus_cli.output import emit
 
@@ -31,6 +33,30 @@ def balance(ctx: typer.Context) -> None:
 def ledger(ctx: typer.Context, after: After = None, limit: Limit = 100) -> None:
     """List the credit ledger, newest first."""
     emit(sdk(ctx).billing.list_credit_ledger(after=after, limit=limit))
+
+
+@app.command("spend")
+def spend(
+    ctx: typer.Context,
+    since: Annotated[
+        datetime | None,
+        typer.Option(
+            "--since",
+            parser=parse_time,
+            help="Usage from the UTC day containing this RFC 3339 time on.",
+        ),
+    ] = None,
+    until: Annotated[
+        datetime | None,
+        typer.Option(
+            "--until",
+            parser=parse_time,
+            help="Usage through the UTC day containing this RFC 3339 time.",
+        ),
+    ] = None,
+) -> None:
+    """Read what usage cost, per UTC day and per model or hardware SKU."""
+    emit(sdk(ctx).billing.get_spend(since=since, until=until))
 
 
 @app.command("checkout")
