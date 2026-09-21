@@ -1,10 +1,12 @@
 """Command output. A command that answers with a resource prints one
-pretty-printed JSON value; `login` and `logout` report prose instead, and
-style it through the helpers here so every colour the CLI emits has one
-owner. Typer drops the escapes when it is not writing to a terminal, so
-piped output stays plain."""
+pretty-printed JSON value — to stdout, or to the file `--output` named,
+since a whole trace is more than a terminal shows; `login` and `logout`
+report prose instead, and style it through the helpers here so every
+colour the CLI emits has one owner. Typer drops the escapes when it is
+not writing to a terminal, so piped output stays plain."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -16,12 +18,43 @@ from albus_cli import docs
 # Wide enough for the labels `login` prints, so their values line up.
 _LABEL = 12
 
+_destination: Path | None = None
+
+
+def direct_to(path: Path | None) -> None:
+    """Where `emit` writes from now on: a file, or stdout for None. The
+    global options set it before every command, and a file it cannot
+    write is refused there, before any request is made."""
+    global _destination
+    if path is not None:
+        _write(path, path.touch)
+
+    _destination = path
+
 
 def emit(value: BaseModel | dict[str, Any]) -> None:
     if isinstance(value, BaseModel):
         value = value.model_dump(mode="json", exclude_none=True)
 
-    print(json.dumps(value, indent=2))
+    text = json.dumps(value, indent=2)
+    if _destination is None:
+        print(text)
+        return
+
+    _write(_destination, lambda: _destination.write_text(text + "\n"))
+
+
+def _write(path: Path, attempt: Callable[[], object]) -> None:
+    """An `--output` file that cannot be written is the option's error,
+    not the credential store's, which is what `main` makes of a stray
+    OSError."""
+    try:
+        attempt()
+    except OSError as unwritable:
+        raise typer.BadParameter(
+            f"cannot write {path}: {unwritable.strerror}",
+            param_hint="--output",
+        ) from unwritable
 
 
 def progress(message: str) -> None:

@@ -10,9 +10,11 @@ from albus_sdk import models
 # error; it arrives with `albus-sdk` rather than as a dependency of ours.
 from pydantic import ValidationError
 
+from albus_cli import pagination
 from albus_cli.client import client
 from albus_cli.context import base_url, options, organization, sdk
 from albus_cli.output import emit
+from albus_cli.pagination import After, Limit
 
 app = typer.Typer(no_args_is_help=True, help="Run and inspect sessions.")
 
@@ -24,11 +26,10 @@ SessionID = Annotated[
         "the same session.",
     ),
 ]
-After = Annotated[
-    str | None,
-    typer.Option("--after", help="Pagination cursor from a previous page."),
-]
-Limit = Annotated[int, typer.Option("--limit", help="Page size.")]
+# The most the API serves per request, from `api/openapi.yaml`.
+SESSIONS_PAGE = 100
+MESSAGES_PAGE = 1000
+AUDIT_PAGE = 1000
 
 
 def tool_blocks(names: list[str]) -> models.Tools | None:
@@ -40,11 +41,11 @@ def tool_blocks(names: list[str]) -> models.Tools | None:
     for name in names:
         if name == "web_search":
             blocks.web_search = models.WebSearchTool()
-        elif name == "terminal":
-            blocks.terminal = models.TerminalTool()
+        elif name == "computer":
+            blocks.computer = models.ComputerTool()
         else:
             raise typer.BadParameter(
-                f"unknown tool {name!r}: choose web_search or terminal"
+                f"unknown tool {name!r}: choose web_search or computer"
             )
 
     return blocks
@@ -137,7 +138,9 @@ def run(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help='Provider name (e.g. "gemini").'),
+        typer.Option(
+            "--provider", help='Provider name (e.g. "google_agent_studio").'
+        ),
     ] = None,
     credential: Annotated[
         str | None,
@@ -157,7 +160,7 @@ def run(
         list[str] | None,
         typer.Option(
             "--tool",
-            help="Tool the model may call (web_search, terminal). "
+            help="Tool the model may call (web_search, computer). "
             "Repeat to allow several.",
         ),
     ] = None,
@@ -239,9 +242,22 @@ def run(
 
 
 @app.command("list")
-def list_sessions(ctx: typer.Context) -> None:
-    """List all sessions."""
-    emit(sdk(ctx).sessions.list_sessions())
+def list_sessions(
+    ctx: typer.Context, after: After = None, limit: Limit = None
+) -> None:
+    """List all sessions, most recently used first."""
+    sessions = sdk(ctx).sessions
+    emit(
+        pagination.collect(
+            lambda cursor, size: sessions.list_sessions(
+                after=cursor, limit=size
+            ),
+            lambda page: page.sessions,
+            SESSIONS_PAGE,
+            after,
+            limit,
+        )
+    )
 
 
 @app.command("get")
@@ -249,10 +265,26 @@ def get(
     ctx: typer.Context,
     session_id: SessionID,
     after: After = None,
-    limit: Limit = 100,
+    limit: Limit = None,
 ) -> None:
-    """Get a session with a page of its messages."""
-    emit(sdk(ctx).sessions.get_session(id=session_id, after=after, limit=limit))
+    """Get a session with its messages."""
+    # Messages page by the last message's own `cursor` rather than a
+    # `next_cursor`, so a page shorter than asked for is the last one.
+    sessions = sdk(ctx).sessions
+    size = pagination.size(MESSAGES_PAGE, limit)
+    first = sessions.get_session(id=session_id, after=after, limit=size)
+    messages = first.messages
+    full = len(messages) == size
+    while full and (limit is None or len(messages) < limit):
+        remaining = None if limit is None else limit - len(messages)
+        size = pagination.size(MESSAGES_PAGE, remaining)
+        page = sessions.get_session(
+            id=session_id, after=str(messages[-1].cursor), limit=size
+        )
+        messages.extend(page.messages)
+        full = len(page.messages) == size
+
+    emit(first)
 
 
 @app.command("audit")
@@ -260,12 +292,19 @@ def audit(
     ctx: typer.Context,
     session_id: SessionID,
     after: After = None,
-    limit: Limit = 100,
+    limit: Limit = None,
 ) -> None:
-    """List a page of a session's audit log."""
+    """List a session's audit log."""
+    sessions = sdk(ctx).sessions
     emit(
-        sdk(ctx).sessions.get_session_audit(
-            id=session_id, after=after, limit=limit
+        pagination.collect(
+            lambda cursor, size: sessions.get_session_audit(
+                id=session_id, after=cursor, limit=size
+            ),
+            lambda page: page.events,
+            AUDIT_PAGE,
+            after,
+            limit,
         )
     )
 

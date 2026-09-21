@@ -21,13 +21,34 @@ def session() -> models.Session:
     )
 
 
-def assistant_message() -> models.SessionMessage:
+def assistant_message(cursor: int = 1) -> models.SessionMessage:
     return models.SessionMessage(
-        cursor=1,
+        cursor=cursor,
         invocation_key="inv-1",
         role="assistant",
         content="hello back",
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def trace(key: str = "inv-1") -> models.TraceSummary:
+    return models.TraceSummary(
+        invocation_key=key,
+        session_id="s1",
+        status="SUCCEEDED",
+        spans_expired=False,
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+
+def span(span_id: str) -> models.TraceSpan:
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    return models.TraceSpan(
+        id=span_id,
+        type="step",
+        status="SUCCEEDED",
+        started_at=now,
+        ended_at=now,
     )
 
 
@@ -81,6 +102,10 @@ class FakeSessions:
     message: models.SessionMessage | None = field(
         default_factory=assistant_message
     )
+    # What `get_session` serves, one list per page, in order.
+    message_pages: list[list[models.SessionMessage]] = field(
+        default_factory=lambda: [[assistant_message()]]
+    )
 
     def run_session(self, **kwargs: Any) -> operations.RunSessionResponse:
         self.calls.append(Call("run_session", kwargs))
@@ -94,6 +119,12 @@ class FakeSessions:
     def list_sessions(self, **kwargs: Any) -> models.ListSessionsResponse:
         self.calls.append(Call("list_sessions", kwargs))
         return models.ListSessionsResponse(sessions=[session()])
+
+    def get_session(self, **kwargs: Any) -> models.SessionResponse:
+        self.calls.append(Call("get_session", kwargs))
+        served = len([call for call in self.calls if call.name == "get_session"])
+        page = self.message_pages[served - 1]
+        return models.SessionResponse(session=session(), messages=page)
 
     def cancel_session(self, **kwargs: Any) -> models.CancelSessionResponse:
         self.calls.append(Call("cancel_session", kwargs))
@@ -232,35 +263,42 @@ class FakeMemories:
 @dataclass
 class FakeTraces:
     calls: list[Call]
+    # What each operation serves, keyed by the cursor asked for: None is
+    # the first page. A page names the next with its `next_cursor`.
+    trace_pages: dict[str | None, models.ListTracesResponse] = field(
+        default_factory=lambda: {
+            None: models.ListTracesResponse(traces=[trace()])
+        }
+    )
+    span_pages: dict[str | None, models.TraceResponse] = field(
+        default_factory=lambda: {None: trace_response([])}
+    )
 
     def list_traces(self, **kwargs: Any) -> models.ListTracesResponse:
         self.calls.append(Call("list_traces", kwargs))
-        return models.ListTracesResponse(
-            traces=[
-                models.TraceSummary(
-                    invocation_key="inv-1",
-                    session_id="s1",
-                    status="SUCCEEDED",
-                    spans_expired=False,
-                    started_at=datetime(2026, 1, 1, tzinfo=UTC),
-                )
-            ]
-        )
+        return self.trace_pages[kwargs["after"]].model_copy(deep=True)
 
     def get_trace(self, **kwargs: Any) -> operations.GetTraceResponse:
         self.calls.append(Call("get_trace", kwargs))
         return operations.GetTraceResponse(
             headers={},
-            result=models.TraceResponse(
-                invocation_key="inv-1",
-                session_id="s1",
-                status="SUCCEEDED",
-                spans_expired=False,
-                started_at=datetime(2026, 1, 1, tzinfo=UTC),
-                session_position=1,
-                spans=[],
-            ),
+            result=self.span_pages[kwargs["after"]].model_copy(deep=True),
         )
+
+
+def trace_response(
+    spans: list[models.TraceSpan], next_cursor: str | None = None
+) -> models.TraceResponse:
+    return models.TraceResponse(
+        invocation_key="inv-1",
+        session_id="s1",
+        status="SUCCEEDED",
+        spans_expired=False,
+        started_at=datetime(2026, 1, 1, tzinfo=UTC),
+        session_position=1,
+        spans=spans,
+        next_cursor=next_cursor,
+    )
 
 
 @dataclass

@@ -3,6 +3,7 @@
 import json
 from http import HTTPStatus
 from importlib.metadata import version
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -93,6 +94,16 @@ def configure(
             "several. Defaults to the one joined first.",
         ),
     ] = None,
+    output_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            dir_okay=False,
+            writable=True,
+            help="Write the JSON response to this file instead of stdout.",
+        ),
+    ] = None,
     show_version: Annotated[
         bool,
         typer.Option(
@@ -106,6 +117,7 @@ def configure(
     ctx.obj = Options(
         base_url=base_url, timeout=timeout, organization=organization
     )
+    output.direct_to(output_path)
 
 
 @app.command("health")

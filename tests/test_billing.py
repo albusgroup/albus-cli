@@ -28,7 +28,7 @@ def test_balance(albus: FakeAlbus) -> None:
     assert json.loads(result.stdout)["balance_usd"] == "12.50"
 
 
-def test_ledger_pages_with_the_cursor(albus: FakeAlbus) -> None:
+def test_ledger_resumes_after_the_cursor(albus: FakeAlbus) -> None:
     result = runner.invoke(
         app, ["billing", "ledger", "--after", "c1", "--limit", "5"]
     )

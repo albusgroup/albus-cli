@@ -4,8 +4,10 @@ from typing import Annotated
 
 import typer
 
+from albus_cli import pagination
 from albus_cli.context import sdk
 from albus_cli.output import emit
+from albus_cli.pagination import After, Limit
 
 app = typer.Typer(
     no_args_is_help=True, help="List and delete memory groups and memories."
@@ -15,27 +17,46 @@ Group = Annotated[
     str,
     typer.Option("--group", help="Memory group key."),
 ]
-After = Annotated[
-    str | None,
-    typer.Option("--after", help="Pagination cursor from a previous page."),
-]
-Limit = Annotated[int, typer.Option("--limit", help="Page size.")]
+# The most the API serves per request, from `api/openapi.yaml`.
+PAGE = 1000
 
 
 @app.command("groups")
 def list_groups(
-    ctx: typer.Context, after: After = None, limit: Limit = 100
+    ctx: typer.Context, after: After = None, limit: Limit = None
 ) -> None:
     """List the organization's memory groups."""
-    emit(sdk(ctx).memories.list_memory_groups(after=after, limit=limit))
+    memories = sdk(ctx).memories
+    emit(
+        pagination.collect(
+            lambda cursor, size: memories.list_memory_groups(
+                after=cursor, limit=size
+            ),
+            lambda page: page.memory_groups,
+            PAGE,
+            after,
+            limit,
+        )
+    )
 
 
 @app.command("list")
 def list_memories(
-    ctx: typer.Context, group: Group, after: After = None, limit: Limit = 100
+    ctx: typer.Context, group: Group, after: After = None, limit: Limit = None
 ) -> None:
     """List a group's memories, newest first."""
-    emit(sdk(ctx).memories.list_memories(group=group, after=after, limit=limit))
+    memories = sdk(ctx).memories
+    emit(
+        pagination.collect(
+            lambda cursor, size: memories.list_memories(
+                group=group, after=cursor, limit=size
+            ),
+            lambda page: page.memories,
+            PAGE,
+            after,
+            limit,
+        )
+    )
 
 
 @app.command("delete")

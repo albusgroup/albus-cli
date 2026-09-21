@@ -10,17 +10,16 @@ from typing import Annotated
 
 import typer
 
+from albus_cli import pagination
 from albus_cli.commands.traces import parse_time
 from albus_cli.context import sdk, signed_in_sdk
 from albus_cli.output import emit
+from albus_cli.pagination import After, Limit
 
 app = typer.Typer(no_args_is_help=True, help="Read and top up prepaid credits.")
 
-After = Annotated[
-    str | None,
-    typer.Option("--after", help="Pagination cursor from a previous page."),
-]
-Limit = Annotated[int, typer.Option("--limit", help="Page size.")]
+# The most the API serves per request, from `api/openapi.yaml`.
+LEDGER_PAGE = 1000
 
 
 @app.command("balance")
@@ -30,9 +29,20 @@ def balance(ctx: typer.Context) -> None:
 
 
 @app.command("ledger")
-def ledger(ctx: typer.Context, after: After = None, limit: Limit = 100) -> None:
+def ledger(ctx: typer.Context, after: After = None, limit: Limit = None) -> None:
     """List the credit ledger, newest first."""
-    emit(sdk(ctx).billing.list_credit_ledger(after=after, limit=limit))
+    billing = sdk(ctx).billing
+    emit(
+        pagination.collect(
+            lambda cursor, size: billing.list_credit_ledger(
+                after=cursor, limit=size
+            ),
+            lambda page: page.entries,
+            LEDGER_PAGE,
+            after,
+            limit,
+        )
+    )
 
 
 @app.command("spend")

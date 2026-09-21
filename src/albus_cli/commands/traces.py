@@ -5,8 +5,10 @@ from typing import Annotated, Literal
 
 import typer
 
+from albus_cli import pagination
 from albus_cli.context import sdk
 from albus_cli.output import emit
+from albus_cli.pagination import After, Limit
 
 app = typer.Typer(
     no_args_is_help=True, help="Search and read invocation traces."
@@ -15,10 +17,9 @@ app = typer.Typer(
 Status = Literal["RUNNING", "SUCCEEDED", "FAILED", "CANCELED"]
 Attempts = Literal["final", "all"]
 
-After = Annotated[
-    str | None,
-    typer.Option("--after", help="Pagination cursor from a previous page."),
-]
+# The most the API serves per request, from `api/openapi.yaml`.
+TRACES_PAGE = 100
+SPANS_PAGE = {True: 25, False: 500}
 
 
 def parse_time(value: str) -> datetime:
@@ -74,19 +75,26 @@ def list_traces(
         ),
     ] = None,
     after: After = None,
-    limit: Annotated[int, typer.Option("--limit", help="Page size.")] = 10,
+    limit: Limit = None,
 ) -> None:
     """Search invocations, newest first."""
+    traces = sdk(ctx).traces
     emit(
-        sdk(ctx).traces.list_traces(
-            agent_name=agent_name,
-            agent_revision=agent_revision,
-            status=status,
-            session_id=session_id,
-            since=since,
-            until=until,
-            after=after,
-            limit=limit,
+        pagination.collect(
+            lambda cursor, size: traces.list_traces(
+                agent_name=agent_name,
+                agent_revision=agent_revision,
+                status=status,
+                session_id=session_id,
+                since=since,
+                until=until,
+                after=cursor,
+                limit=size,
+            ),
+            lambda page: page.traces,
+            TRACES_PAGE,
+            after,
+            limit,
         )
     )
 
@@ -112,20 +120,24 @@ def get(
         ),
     ] = "final",
     after: After = None,
-    limit: Annotated[
-        int | None,
-        typer.Option("--limit", help="Page size; the default fits the mode."),
-    ] = None,
+    limit: Limit = None,
 ) -> None:
-    """Get one invocation and a page of its spans."""
+    """Get one invocation and its spans."""
+    traces = sdk(ctx).traces
     emit(
-        sdk(ctx)
-        .traces.get_trace(
-            invocation_key=invocation_key,
-            payloads=payloads,
-            attempts=attempts,
-            after=after,
-            limit=limit,
+        pagination.collect(
+            lambda cursor, size: (
+                traces.get_trace(
+                    invocation_key=invocation_key,
+                    payloads=payloads,
+                    attempts=attempts,
+                    after=cursor,
+                    limit=size,
+                ).result
+            ),
+            lambda page: page.spans,
+            SPANS_PAGE[payloads],
+            after,
+            limit,
         )
-        .result
     )

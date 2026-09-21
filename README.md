@@ -98,7 +98,7 @@ albus status
 
 albus sessions run my-session -p "summarize the incident" \
   --agent-name support-triage --model gemini-3.6-flash \
-  --provider gemini --credential albus.sh/secrets/gemini-key
+  --provider google_agent_studio --credential albus.sh/secrets/gemini-key
 albus sessions run my-session -p "and the follow-up?" \
   --agent-name support-triage --agent-file agent.json --no-wait
 albus sessions list

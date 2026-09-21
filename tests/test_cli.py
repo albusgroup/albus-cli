@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from albus_cli import client, credentials
 from albus_cli.credentials import Credential
 from albus_cli.main import app, main
-from tests.conftest import FakeAlbus
+from tests.conftest import FakeAlbus, assistant_message
 
 runner = CliRunner()
 
@@ -28,7 +28,7 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
             "--model",
             "gemini-3.6-flash",
             "--provider",
-            "gemini",
+            "google_agent_studio",
             "--credential",
             "albus.sh/secrets/key",
             "--tool",
@@ -485,3 +485,89 @@ def test_cancel_names_the_session(albus: FakeAlbus) -> None:
     assert albus.calls[0].name == "cancel_session"
     assert albus.calls[0].kwargs == {"id": "my-session"}
     assert json.loads(result.stdout)["invocation_key"] == "inv-1"
+
+
+def test_get_collects_messages_after_the_last_cursor(
+    albus: FakeAlbus,
+) -> None:
+    # Messages carry their own cursor and the response no `next_cursor`,
+    # so a full page is followed and a short one is the last.
+    albus.sessions.message_pages = [
+        [assistant_message(cursor) for cursor in range(1, 1001)],
+        [assistant_message(1001)],
+    ]
+
+    result = runner.invoke(app, ["sessions", "get", "s1"])
+
+    assert result.exit_code == 0, result.output
+    assert [call.kwargs for call in albus.calls] == [
+        {"id": "s1", "after": None, "limit": 1000},
+        {"id": "s1", "after": "1000", "limit": 1000},
+    ]
+    body = json.loads(result.stdout)
+    assert len(body["messages"]) == 1001
+    assert body["messages"][-1]["cursor"] == 1001
+
+
+def test_get_pages_messages_up_to_the_limit(albus: FakeAlbus) -> None:
+    albus.sessions.message_pages = [
+        [assistant_message(1), assistant_message(2)],
+        [assistant_message(3)],
+    ]
+
+    result = runner.invoke(app, ["sessions", "get", "s1", "--limit", "2"])
+
+    assert result.exit_code == 0, result.output
+    assert len(albus.calls) == 1
+    assert len(json.loads(result.stdout)["messages"]) == 2
+
+
+def test_output_option_writes_the_response_to_a_file(
+    albus: FakeAlbus, tmp_path: Path
+) -> None:
+    target = tmp_path / "sessions.json"
+
+    result = runner.invoke(app, ["-o", str(target), "sessions", "list"])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == ""
+    assert json.loads(target.read_text())["sessions"][0]["id"] == "s1"
+
+
+def test_output_option_refuses_a_file_it_cannot_write(
+    albus: FakeAlbus, tmp_path: Path
+) -> None:
+    target = tmp_path / "missing" / "out.json"
+
+    result = runner.invoke(app, ["-o", str(target), "sessions", "list"])
+
+    assert result.exit_code == 2, result.output
+    assert "cannot write" in result.output
+    assert albus.calls == []
+
+
+def test_output_option_names_the_file_when_the_write_fails(
+    albus: FakeAlbus, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "out.json"
+
+    def full(self: Path, text: str) -> int:
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_text", full)
+
+    result = runner.invoke(app, ["-o", str(target), "sessions", "list"])
+
+    assert result.exit_code == 2, result.output
+    assert "--output" in result.output
+    assert "cannot write" in result.output
+    assert "credentials" not in result.output
+
+
+def test_output_option_rejects_a_directory(
+    albus: FakeAlbus, tmp_path: Path
+) -> None:
+    result = runner.invoke(app, ["--output", str(tmp_path), "sessions", "list"])
+
+    assert result.exit_code == 2, result.output
+    assert albus.calls == []
