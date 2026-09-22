@@ -75,7 +75,10 @@ def member() -> models.OrganizationMember:
 
 def organization() -> models.Organization:
     return models.Organization(
-        id="o1", name="Albus", created_at=datetime(2026, 1, 1, tzinfo=UTC)
+        id="o1",
+        name="Albus",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        issuer="https://oidc.albus.sh/organizations/o1",
     )
 
 
