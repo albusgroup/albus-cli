@@ -139,7 +139,7 @@ def run(
     provider: Annotated[
         str | None,
         typer.Option(
-            "--provider", help='Provider name (e.g. "google_agent_studio").'
+            "--provider", help='Provider name (e.g. "google_ai_studio").'
         ),
     ] = None,
     credential: Annotated[

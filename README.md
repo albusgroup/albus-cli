@@ -75,6 +75,10 @@ bound to its organization and ignores `--org`.
 session is written to `$ALBUS_CONFIG_DIR/credentials.json`, else
 `$XDG_CONFIG_HOME/albus/credentials.json`, else `~/.config/albus/`.
 
+After any command, `albus` notes on stderr when PyPI has a newer release. It
+asks at most once a day and caches the answer in the same directory; set
+`ALBUS_NO_UPGRADE_CHECK=1` to switch the check off.
+
 Operations whose `security` in `api/openapi.yaml` lists `bearerAuth` only,
 such as `/tokens` and `/invites`, need the browser session. `albus tokens`
 and `albus invites` use it even when `ALBUS_API_KEY` is exported, and say to
@@ -98,7 +102,7 @@ albus status
 
 albus sessions run my-session -p "summarize the incident" \
   --agent-name support-triage --model gemini-3.6-flash \
-  --provider google_agent_studio --credential albus.sh/secrets/gemini-key
+  --provider google_ai_studio --credential albus.sh/secrets/gemini-key
 albus sessions run my-session -p "and the follow-up?" \
   --agent-name support-triage --agent-file agent.json --no-wait
 albus sessions list

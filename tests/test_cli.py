@@ -28,7 +28,7 @@ def test_run_builds_agent_config_from_flags(albus: FakeAlbus) -> None:
             "--model",
             "gemini-3.6-flash",
             "--provider",
-            "google_agent_studio",
+            "google_ai_studio",
             "--credential",
             "albus.sh/secrets/key",
             "--tool",

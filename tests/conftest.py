@@ -8,6 +8,7 @@ import pytest
 from albus_sdk import models, operations
 
 import albus_cli.client
+import albus_cli.upgrade
 
 
 def session() -> models.Session:
@@ -429,6 +430,14 @@ def unstyled_output(monkeypatch: pytest.MonkeyPatch) -> None:
     GitHub Actions; `dumb` is how it is told otherwise.
     """
     monkeypatch.setenv("TERM", "dumb")
+
+
+@pytest.fixture(autouse=True)
+def no_upgrade_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep `main()` off PyPI: the upgrade notice is the one lookup that
+    is not the SDK's, and `test_upgrade` fakes it where it is the
+    subject."""
+    monkeypatch.setenv(albus_cli.upgrade.DISABLE_ENV, "1")
 
 
 @pytest.fixture

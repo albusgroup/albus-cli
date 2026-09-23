@@ -105,6 +105,18 @@ def note(message: str) -> None:
     typer.echo(message)
 
 
+def upgrade_available(package: str, installed: str, latest: str) -> None:
+    """A newer release exists. On stderr, after the command's own
+    output, so a piped JSON response stays JSON."""
+    typer.secho(
+        f"albus: {package} {latest} is available (installed {installed}). "
+        f"Upgrade with `uv tool upgrade {package}` or "
+        f"`pip install --upgrade {package}`.",
+        fg=typer.colors.YELLOW,
+        err=True,
+    )
+
+
 def error(message: str) -> None:
     """What went wrong, and where every message the CLI reports is
     documented — the reader who cannot act on the sentence, agent or

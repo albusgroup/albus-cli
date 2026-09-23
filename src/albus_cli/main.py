@@ -10,7 +10,7 @@ import httpx
 import typer
 from albus_sdk import errors
 
-from albus_cli import client, credentials, docs, oauth, output
+from albus_cli import client, credentials, docs, oauth, output, upgrade
 from albus_cli.client import (
     API_KEY_ENV,
     BASE_URL_ENV,
@@ -129,6 +129,15 @@ def health(ctx: typer.Context) -> None:
 
 
 def main() -> None:
+    # The notice comes last, whatever the command did: after the answer
+    # on stdout or the error on stderr, never in place of either.
+    try:
+        _run()
+    finally:
+        upgrade.notice()
+
+
+def _run() -> None:
     try:
         app()
     except (
